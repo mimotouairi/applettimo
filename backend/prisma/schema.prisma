@@ -1,0 +1,160 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  username  String   @unique
+  email     String   @unique
+  password  String
+  phone     String?
+  photo     String?
+  bio       String?
+  createdAt DateTime @default(now())
+
+  posts         Post[]
+  comments      Comment[]
+  likes         Like[]
+  savedPosts    SavedPost[]
+  followers     Follower[] @relation("following")
+  following     Follower[] @relation("follower")
+  stories       Story[]
+  storyViews    StoryView[]
+  storyLikes    StoryLike[]
+  sentMessages  Message[]  @relation("sender")
+  receivedMessages Message[] @relation("receiver")
+  convos1       Conversation[] @relation("user1")
+  convos2       Conversation[] @relation("user2")
+}
+
+model Post {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  content   String?
+  mediaUrl  String?
+  mediaType String?  // 'text', 'image', 'video'
+  privacy   String   @default("public")
+  createdAt DateTime @default(now())
+  repostId  Int?
+  
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repost     Post?       @relation("Reposts", fields: [repostId], references: [id], onDelete: Cascade)
+  reposts    Post[]      @relation("Reposts")
+  likes      Like[]
+  comments   Comment[]
+  savedBy    SavedPost[]
+}
+
+model Like {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  postId    Int
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+}
+
+model Comment {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  postId    Int
+  comment   String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+}
+
+model SavedPost {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  postId    Int
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+}
+
+model Follower {
+  id          Int      @id @default(autoincrement())
+  followerId  Int
+  followingId Int
+  createdAt   DateTime @default(now())
+
+  follower  User @relation("follower", fields: [followerId], references: [id])
+  following User @relation("following", fields: [followingId], references: [id])
+
+  @@unique([followerId, followingId])
+}
+
+model Story {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  mediaUrl  String
+  mediaType String   @default("image")
+  createdAt DateTime @default(now())
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  views      StoryView[]
+  likes      StoryLike[]
+}
+
+model StoryView {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  storyId   Int
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  story Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, storyId])
+}
+
+model StoryLike {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  storyId   Int
+  createdAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  story Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, storyId])
+}
+
+model Conversation {
+  id            Int      @id @default(autoincrement())
+  user1Id       Int
+  user2Id       Int
+  lastMessageId Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user1 User @relation("user1", fields: [user1Id], references: [id])
+  user2 User @relation("user2", fields: [user2Id], references: [id])
+  messages Message[]
+}
+
+model Message {
+  id             Int      @id @default(autoincrement())
+  conversationId Int
+  senderId       Int
+  receiverId     Int
+  content        String
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id])
+  sender       User         @relation("sender", fields: [senderId], references: [id])
+  receiver     User         @relation("receiver", fields: [receiverId], references: [id])
+}
