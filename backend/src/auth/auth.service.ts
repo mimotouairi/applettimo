@@ -80,8 +80,17 @@ export class AuthService {
       let photoUrl = data.photo;
 
       if (file) {
-        const result = await this.cloudinary.uploadFile(file);
-        photoUrl = result.secure_url;
+        try {
+          const result = await this.cloudinary.uploadFile(file);
+          photoUrl = result.secure_url;
+        } finally {
+          if (file.path) {
+            const fs = require('fs');
+            if (fs.existsSync(file.path)) {
+              fs.unlinkSync(file.path);
+            }
+          }
+        }
       }
 
       const user = await this.prisma.user.update({
@@ -116,13 +125,31 @@ export class AuthService {
       let coverPhotoUrl = data.coverPhoto;
 
       if (files.photo && files.photo[0]) {
-        const result = await this.cloudinary.uploadFile(files.photo[0]);
-        photoUrl = result.secure_url;
+        try {
+          const result = await this.cloudinary.uploadFile(files.photo[0]);
+          photoUrl = result.secure_url;
+        } finally {
+          if (files.photo[0].path) {
+            const fs = require('fs');
+            if (fs.existsSync(files.photo[0].path)) {
+              fs.unlinkSync(files.photo[0].path);
+            }
+          }
+        }
       }
 
       if (files.coverPhoto && files.coverPhoto[0]) {
-        const result = await this.cloudinary.uploadFile(files.coverPhoto[0]);
-        coverPhotoUrl = result.secure_url;
+        try {
+          const result = await this.cloudinary.uploadFile(files.coverPhoto[0]);
+          coverPhotoUrl = result.secure_url;
+        } finally {
+          if (files.coverPhoto[0].path) {
+            const fs = require('fs');
+            if (fs.existsSync(files.coverPhoto[0].path)) {
+              fs.unlinkSync(files.coverPhoto[0].path);
+            }
+          }
+        }
       }
 
       const user = await this.prisma.user.update({

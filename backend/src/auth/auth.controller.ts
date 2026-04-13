@@ -21,7 +21,7 @@ export class AuthController {
   }
 
   @Post('update_profile')
-  @UseInterceptors(FileInterceptor('photo', { storage: memoryStorage() }))
+  @UseInterceptors(FileInterceptor('photo'))
   async updateProfile(@Body() body: any, @UploadedFile() file: Express.Multer.File) {
     const result = await this.authService.updateProfileWithCloudinary(body, file);
     return { success: true, data: result };
@@ -31,7 +31,7 @@ export class AuthController {
   @UseInterceptors(FileFieldsInterceptor([
     { name: 'photo', maxCount: 1 },
     { name: 'coverPhoto', maxCount: 1 }
-  ], { storage: memoryStorage() }))
+  ]))
   async updateProfileV2(@Body() body: any, @UploadedFiles() files: { photo?: Express.Multer.File[], coverPhoto?: Express.Multer.File[] }) {
     const result = await this.authService.updateProfileV2WithCloudinary(body, files);
     return { success: true, data: result };

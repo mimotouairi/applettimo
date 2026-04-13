@@ -81,8 +81,8 @@ class ApiService {
           ),
         );
 
-        // Increased timeout for file uploads to 5 minutes
-        final streamedResponse = await request.send().timeout(const Duration(seconds: 300));
+        // Increased timeout for file uploads to 15 minutes
+        final streamedResponse = await request.send().timeout(const Duration(seconds: 900));
         final response = await http.Response.fromStream(streamedResponse);
         return _handleResponse(response, endpoint);
       } else {
@@ -93,7 +93,7 @@ class ApiService {
             'Accept': 'application/json',
           },
           body: jsonEncode(data),
-        ).timeout(const Duration(seconds: 60));
+        ).timeout(const Duration(seconds: 120));
         return _handleResponse(response, endpoint);
       }
     } catch (e) {
@@ -130,8 +130,8 @@ class ApiService {
         );
       }
 
-      // Increased timeout for file uploads to 5 minutes
-      final streamedResponse = await request.send().timeout(const Duration(seconds: 300));
+      // Increased timeout for file uploads to 15 minutes
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 900));
       final response = await http.Response.fromStream(streamedResponse);
       return _handleResponse(response, endpoint);
     } catch (e) {
@@ -146,7 +146,7 @@ class ApiService {
       final url = Uri.parse('$baseUrl/$mappedEndpoint');
       if (kDebugMode) print('📡 API GET: $url');
 
-      final response = await http.get(url).timeout(const Duration(seconds: 60));
+      final response = await http.get(url).timeout(const Duration(seconds: 120));
       return _handleResponse(response, endpoint);
     } catch (e) {
       if (kDebugMode) print('❌ API GET Error: $e');
@@ -173,8 +173,8 @@ class ApiService {
         ),
       );
 
-      // Increased timeout to 5 minutes for direct uploads
-      final streamedResponse = await request.send().timeout(const Duration(seconds: 300));
+      // Increased timeout to 15 minutes for direct uploads
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 900));
       final response = await http.Response.fromStream(streamedResponse);
 
       return _handleResponse(response, endpoint);
