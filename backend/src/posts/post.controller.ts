@@ -36,8 +36,17 @@ export class PostController {
     storage: memoryStorage()
   }))
   async createPost(@Body() body: any, @UploadedFile() file: Express.Multer.File) {
-    const result = await this.postService.createPostWithCloudinary(body, file);
-    return { success: true, data: result };
+    console.log('--- [PostController] New create_post request ---');
+    console.log('User ID:', body.user_id);
+    console.log('File:', file ? `${file.originalname} (${file.size} bytes)` : 'No file');
+    
+    try {
+      const result = await this.postService.createPostWithCloudinary(body, file);
+      return { success: true, data: result };
+    } catch (error) {
+      console.error('[PostController] Error in createPost:', error);
+      throw error;
+    }
   }
 
   @Post('create_post_multi')
@@ -47,8 +56,16 @@ export class PostController {
     }),
   )
   async createPostMulti(@Body() body: any, @UploadedFiles() files: Express.Multer.File[]) {
-    const result = await this.postService.createPostMultiWithCloudinary(body, files || []);
-    return { success: true, data: result };
+    console.log('--- [PostController] New create_post_multi request ---');
+    console.log('Files count:', files ? files.length : 0);
+    
+    try {
+      const result = await this.postService.createPostMultiWithCloudinary(body, files || []);
+      return { success: true, data: result };
+    } catch (error) {
+      console.error('[PostController] Error in createPostMulti:', error);
+      throw error;
+    }
   }
 
   @Post('repost_post')
