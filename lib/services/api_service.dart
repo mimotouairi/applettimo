@@ -7,23 +7,11 @@ import 'package:path/path.dart' as path;
 class ApiService {
   // 📝 ادخل عنوان الـ IP الخاص بجهاز الكمبيوتر هنا (مثلاً 192.168.1.5)
   // يمكنك معرفته من خلال كتابة 'ipconfig' في الـ Terminal الخاص بالكمبيوتر
-  static const String hostIp = '192.168.100.9'; 
+  static const String hostIp = 'let-backend.onrender.com'; 
 
-  static String get baseUrl {
-    if (Platform.isAndroid || Platform.isIOS) {
-      return 'http://$hostIp:3000/api';
-    } else {
-      return 'http://localhost:3000/api';
-    }
-  }
+  static String get baseUrl => 'https://$hostIp/api';
 
-  static String get baseMediaUrl {
-    if (Platform.isAndroid || Platform.isIOS) {
-      return 'http://$hostIp:3000';
-    } else {
-      return 'http://localhost:3000';
-    }
-  }
+  static String get baseMediaUrl => 'https://$hostIp';
 
   static String? getImageUrl(String? url) {
     if (url == null || url.isEmpty) return null;
@@ -72,18 +60,21 @@ class ApiService {
     return '$mapped$queryString';
   }
 
+    } catch (e) {
+      return {'success': false, 'message': 'فشل الاتصال بالخادم (تأكد من الإنترنت): ${e.toString()}'};
+    }
+  }
+
   static Future<Map<String, dynamic>> post(String endpoint, Map<String, dynamic> data, {File? file, String fileField = 'media'}) async {
     try {
       final mappedEndpoint = _mapEndpoint(endpoint);
       if (file != null) {
         final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/$mappedEndpoint'));
         
-        // Add data as fields
         data.forEach((key, value) {
           request.fields[key] = value.toString();
         });
 
-        // Add file
         final fileExtension = path.extension(file.path).toLowerCase();
         final mimeType = _getMimeType(fileExtension);
         request.files.add(
@@ -94,7 +85,7 @@ class ApiService {
           ),
         );
 
-        final streamedResponse = await request.send();
+        final streamedResponse = await request.send().timeout(const Duration(seconds: 60));
         final response = await http.Response.fromStream(streamedResponse);
         return _handleResponse(response, endpoint);
       } else {
@@ -105,7 +96,7 @@ class ApiService {
             'Accept': 'application/json',
           },
           body: jsonEncode(data),
-        );
+        ).timeout(const Duration(seconds: 60));
         return _handleResponse(response, endpoint);
       }
     } catch (e) {
