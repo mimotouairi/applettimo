@@ -32,9 +32,7 @@ export class PostController {
   }
 
   @Post('create_post')
-  @UseInterceptors(FileInterceptor('media', {
-    storage: memoryStorage()
-  }))
+  @UseInterceptors(FileInterceptor('media'))
   async createPost(@Body() body: any, @UploadedFile() file: Express.Multer.File) {
     console.log('--- [PostController] New create_post request ---');
     console.log('User ID:', body.user_id);
@@ -51,9 +49,7 @@ export class PostController {
 
   @Post('create_post_multi')
   @UseInterceptors(
-    FilesInterceptor('media', 10, {
-      storage: memoryStorage(),
-    }),
+    FilesInterceptor('media', 10),
   )
   async createPostMulti(@Body() body: any, @UploadedFiles() files: Express.Multer.File[]) {
     console.log('--- [PostController] New create_post_multi request ---');

@@ -201,9 +201,19 @@ export class PostService {
       let type = media_type || 'text';
 
       if (file) {
-        const result = await this.cloudinary.uploadFile(file);
-        url = result.secure_url;
-        type = file.mimetype.startsWith('video') ? 'video' : 'image';
+        try {
+          const result = await this.cloudinary.uploadFile(file);
+          url = result.secure_url;
+          type = file.mimetype.startsWith('video') ? 'video' : 'image';
+        } finally {
+          // Cleanup temporary file
+          if (file.path) {
+            const fs = require('fs');
+            if (fs.existsSync(file.path)) {
+              fs.unlinkSync(file.path);
+            }
+          }
+        }
       }
 
       const post = await this.prisma.post.create({
@@ -235,8 +245,20 @@ export class PostService {
 
   async createPostMultiWithCloudinary(data: any, files: Express.Multer.File[] = []) {
     const { user_id, content, privacy } = data;
-    const uploadPromises = files.map(file => this.cloudinary.uploadFile(file));
-    const uploadResults = await Promise.all(uploadPromises);
+    const uploadResults = await Promise.all(
+      files.map(async (file) => {
+        try {
+          return await this.cloudinary.uploadFile(file);
+        } finally {
+          if (file.path) {
+            const fs = require('fs');
+            if (fs.existsSync(file.path)) {
+              fs.unlinkSync(file.path);
+            }
+          }
+        }
+      })
+    );
     const urls = uploadResults.map(res => res.secure_url);
 
     const hasVideo = files.some((f) => f.mimetype.startsWith('video'));

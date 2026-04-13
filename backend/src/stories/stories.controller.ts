@@ -15,9 +15,7 @@ export class StoryController {
   }
 
   @Post('add_story')
-  @UseInterceptors(FileInterceptor('media', {
-    storage: memoryStorage(),
-  }))
+  @UseInterceptors(FileInterceptor('media'))
   async addStory(@Body() body: any, @UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Media file is required');
     const { user_id, media_type } = body;

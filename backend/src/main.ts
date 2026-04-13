@@ -12,8 +12,13 @@ async function bootstrap() {
   app.enableCors();
 
   // Increase body limits for large video uploads
-  app.use(express.json({ limit: '100mb' }));
-  app.use(express.urlencoded({ limit: '100mb', extended: true }));
+  app.use(express.json({ limit: '500mb' }));
+  app.use(express.urlencoded({ limit: '500mb', extended: true }));
+
+  // Set timeout for large file uploads (10 minutes)
+  const server = app.getHttpServer();
+  server.timeout = 600000; 
+  server.keepAliveTimeout = 610000;
 
   // Integrated global validation pipe
   app.useGlobalPipes(new ValidationPipe());
