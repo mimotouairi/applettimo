@@ -1,5 +1,7 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Body, UseInterceptors, UploadedFile, UploadedFiles } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { FileInterceptor, FileFieldsInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 
 @Controller('auth')
 export class AuthController {
@@ -19,16 +21,22 @@ export class AuthController {
   }
 
   @Post('update_profile')
-  async updateProfile(@Body() body: any) {
-    const result = await this.authService.updateProfile(body);
+  @UseInterceptors(FileInterceptor('photo', { storage: memoryStorage() }))
+  async updateProfile(@Body() body: any, @UploadedFile() file: Express.Multer.File) {
+    const result = await this.authService.updateProfileWithCloudinary(body, file);
     return { success: true, data: result };
   }
 
   @Post('update_profile_v2')
-  async updateProfileV2(@Body() body: any) {
-    const result = await this.authService.updateProfileV2(body);
+  @UseInterceptors(FileFieldsInterceptor([
+    { name: 'photo', maxCount: 1 },
+    { name: 'coverPhoto', maxCount: 1 }
+  ], { storage: memoryStorage() }))
+  async updateProfileV2(@Body() body: any, @UploadedFiles() files: { photo?: Express.Multer.File[], coverPhoto?: Express.Multer.File[] }) {
+    const result = await this.authService.updateProfileV2WithCloudinary(body, files);
     return { success: true, data: result };
   }
+
 
   @Post('switch_account')
   async switchAccount(@Body() body: any) {

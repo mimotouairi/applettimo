@@ -1,9 +1,7 @@
 import { Controller, Get, Post, Body, Query, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
 import { StoryService } from './stories.service';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
-import { mkdirSync } from 'fs';
+import { memoryStorage } from 'multer';
 
 @Controller('stories')
 export class StoryController {
@@ -18,28 +16,19 @@ export class StoryController {
 
   @Post('add_story')
   @UseInterceptors(FileInterceptor('media', {
-    storage: diskStorage({
-      destination: (req, file, cb) => {
-        const uploadPath = join(process.cwd(), 'uploads');
-        mkdirSync(uploadPath, { recursive: true });
-        cb(null, uploadPath);
-      },
-      filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-        cb(null, uniqueSuffix + extname(file.originalname));
-      },
-    }),
+    storage: memoryStorage(),
   }))
   async addStory(@Body() body: any, @UploadedFile() file: Express.Multer.File) {
     if (!file) throw new BadRequestException('Media file is required');
     const { user_id, media_type } = body;
-    const result = await this.storyService.addStory(
+    const result = await this.storyService.addStoryWithCloudinary(
       parseInt(user_id),
-      `/uploads/${file.filename}`,
+      file,
       media_type || (file.mimetype.startsWith('video') ? 'video' : 'image'),
     );
     return { success: true, data: result };
   }
+
 
   @Post('toggle_story_like')
   async toggleLike(@Body() body: any) {

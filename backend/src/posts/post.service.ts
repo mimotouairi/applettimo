@@ -1,12 +1,14 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ChatGateway } from '../chat/chat.gateway';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 
 @Injectable()
 export class PostService {
   constructor(
     private prisma: PrismaService,
-    private chatGateway: ChatGateway
+    private chatGateway: ChatGateway,
+    private cloudinary: CloudinaryService
   ) {}
   private postViewsTableAvailable = true;
 
@@ -26,7 +28,6 @@ export class PostService {
     );
   }
 
-  // Helper method to format post for Flutter (snake_case)
   private formatPostForFlutter(post: any) {
     const viewsCount = post._count?.views || 0;
     const engagementScore =
@@ -39,7 +40,7 @@ export class PostService {
       username: post.user?.username,
       photo: post.user?.photo,
       content: post.content,
-      image_url: post.mediaUrl, // Maps to image_url expected by Flutter
+      image_url: post.mediaUrl,
       media_urls: post.mediaItems ? post.mediaItems.map((m: any) => m.url) : (post.mediaUrl ? [post.mediaUrl] : []),
       media_type: post.mediaType,
       likes: post._count?.likes || 0,
@@ -113,8 +114,7 @@ export class PostService {
           OR: [
             { mediaType: { contains: 'video' } },
             { mediaUrl: { contains: '.mp4' } },
-            { mediaUrl: { contains: '.mov' } },
-            { mediaUrl: { contains: '.avi' } }
+            { mediaUrl: { contains: 'cloudinary' } }
           ]
         },
         orderBy: { createdAt: 'desc' },
@@ -136,9 +136,7 @@ export class PostService {
         where: {
           OR: [
             { mediaType: { contains: 'video' } },
-            { mediaUrl: { contains: '.mp4' } },
-            { mediaUrl: { contains: '.mov' } },
-            { mediaUrl: { contains: '.avi' } }
+            { mediaUrl: { contains: 'cloudinary' } }
           ]
         },
         orderBy: { createdAt: 'desc' },
@@ -194,15 +192,24 @@ export class PostService {
     }
   }
 
-  async createPost(data: any, file?: any) {
+  async createPostWithCloudinary(data: any, file?: Express.Multer.File) {
     const { user_id, content, privacy, media_type } = data;
+    let url = null;
+    let type = media_type || 'text';
+
+    if (file) {
+      const result = await this.cloudinary.uploadFile(file);
+      url = result.secure_url;
+      type = file.mimetype.startsWith('video') ? 'video' : 'image';
+    }
+
     const post = await this.prisma.post.create({
       data: {
         userId: parseInt(user_id),
         content,
         privacy: privacy || 'public',
-        mediaType: file ? (file.mimetype.startsWith('video') ? 'video' : (file.mimetype.startsWith('image') ? 'image' : 'video')) : (media_type || 'text'),
-        mediaUrl: file ? `/uploads/${file.filename}` : null
+        mediaType: type,
+        mediaUrl: url
       },
       include: {
         user: { select: { id: true, name: true, username: true, photo: true } },
@@ -211,7 +218,6 @@ export class PostService {
       }
     });
 
-    // Notify mentions
     if (content) {
       this.notifyMentions(content, parseInt(user_id), post.id);
     }
@@ -219,21 +225,26 @@ export class PostService {
     return this.formatPostForFlutter(post);
   }
 
-  async createPostMulti(data: any, files: Express.Multer.File[] = []) {
+  async createPostMultiWithCloudinary(data: any, files: Express.Multer.File[] = []) {
     const { user_id, content, privacy } = data;
+    const uploadPromises = files.map(file => this.cloudinary.uploadFile(file));
+    const uploadResults = await Promise.all(uploadPromises);
+    const urls = uploadResults.map(res => res.secure_url);
+
     const hasVideo = files.some((f) => f.mimetype.startsWith('video'));
     const mediaType = hasVideo ? 'video' : (files.length > 0 ? 'image' : 'text');
+
     const post = await this.prisma.post.create({
       data: {
         userId: parseInt(user_id),
         content,
         privacy: privacy || 'public',
         mediaType,
-        mediaUrl: files.length > 0 ? `/uploads/${files[0].filename}` : null,
+        mediaUrl: urls.length > 0 ? urls[0] : null,
         mediaItems: {
-          create: files.map((file, index) => ({
-            url: `/uploads/${file.filename}`,
-            mediaType: file.mimetype.startsWith('video') ? 'video' : 'image',
+          create: urls.map((url, index) => ({
+            url,
+            mediaType: files[index].mimetype.startsWith('video') ? 'video' : 'image',
             position: index,
           })),
         },
@@ -246,12 +257,19 @@ export class PostService {
       },
     });
 
-    // Notify mentions
     if (content) {
       this.notifyMentions(content, parseInt(user_id), post.id);
     }
 
     return this.formatPostForFlutter(post);
+  }
+
+  async createPost(data: any, file?: any) {
+    return this.createPostWithCloudinary(data, file);
+  }
+
+  async createPostMulti(data: any, files: Express.Multer.File[] = []) {
+    return this.createPostMultiWithCloudinary(data, files);
   }
 
   async repostPost(user_id: string, post_id: string) {
@@ -294,7 +312,6 @@ export class PostService {
           },
         });
 
-        // Fetch actor details for the notification
         const actor = await this.prisma.user.findUnique({
           where: { id: uid },
           select: { id: true, name: true, photo: true }

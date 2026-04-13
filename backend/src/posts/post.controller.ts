@@ -1,9 +1,7 @@
 import { Controller, Get, Post, Body, Query, UseInterceptors, UploadedFile, UploadedFiles } from '@nestjs/common';
 import { PostService } from './post.service';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
-import { mkdirSync } from 'fs';
+import { memoryStorage } from 'multer';
 
 @Controller('posts')
 export class PostController {
@@ -35,41 +33,21 @@ export class PostController {
 
   @Post('create_post')
   @UseInterceptors(FileInterceptor('media', {
-    storage: diskStorage({
-      destination: (req, file, cb) => {
-        const uploadPath = join(process.cwd(), 'uploads');
-        mkdirSync(uploadPath, { recursive: true });
-        cb(null, uploadPath);
-      },
-      filename: (req, file, cb) => {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-        cb(null, uniqueSuffix + extname(file.originalname));
-      }
-    })
+    storage: memoryStorage()
   }))
   async createPost(@Body() body: any, @UploadedFile() file: Express.Multer.File) {
-    const result = await this.postService.createPost(body, file);
+    const result = await this.postService.createPostWithCloudinary(body, file);
     return { success: true, data: result };
   }
 
   @Post('create_post_multi')
   @UseInterceptors(
     FilesInterceptor('media', 10, {
-      storage: diskStorage({
-        destination: (req, file, cb) => {
-          const uploadPath = join(process.cwd(), 'uploads');
-          mkdirSync(uploadPath, { recursive: true });
-          cb(null, uploadPath);
-        },
-        filename: (req, file, cb) => {
-          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-          cb(null, uniqueSuffix + extname(file.originalname));
-        },
-      }),
+      storage: memoryStorage(),
     }),
   )
   async createPostMulti(@Body() body: any, @UploadedFiles() files: Express.Multer.File[]) {
-    const result = await this.postService.createPostMulti(body, files || []);
+    const result = await this.postService.createPostMultiWithCloudinary(body, files || []);
     return { success: true, data: result };
   }
 

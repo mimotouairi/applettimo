@@ -3,24 +3,19 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import 'package:path/path.dart' as path;
+import 'package:flutter/foundation.dart';
 
 class ApiService {
-  // 📝 ادخل عنوان الـ IP الخاص بجهاز الكمبيوتر هنا (مثلاً 192.168.1.5)
-  // يمكنك معرفته من خلال كتابة 'ipconfig' في الـ Terminal الخاص بالكمبيوتر
+  // 📝 رابط السيرفر المرفوع على Render
   static const String hostIp = 'let-backend.onrender.com'; 
 
   static String get baseUrl => 'https://$hostIp/api';
-
   static String get baseMediaUrl => 'https://$hostIp';
 
   static String? getImageUrl(String? url) {
     if (url == null || url.isEmpty) return null;
 
     if (url.startsWith('http')) {
-      // If the URL already contains the wrong hostIp format, fix it
-      if (url.contains('$hostIp-3000')) {
-        return url.replaceFirst('$hostIp-3000', '$hostIp:3000');
-      }
       return url;
     }
 
@@ -60,17 +55,18 @@ class ApiService {
     return '$mapped$queryString';
   }
 
-    } catch (e) {
-      return {'success': false, 'message': 'فشل الاتصال بالخادم (تأكد من الإنترنت): ${e.toString()}'};
-    }
-  }
-
   static Future<Map<String, dynamic>> post(String endpoint, Map<String, dynamic> data, {File? file, String fileField = 'media'}) async {
     try {
       final mappedEndpoint = _mapEndpoint(endpoint);
+      final url = Uri.parse('$baseUrl/$mappedEndpoint');
+      
+      if (kDebugMode) {
+        print('📡 API POST: $url');
+        print('📦 Payload: ${jsonEncode(data)}');
+      }
+
       if (file != null) {
-        final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/$mappedEndpoint'));
-        
+        final request = http.MultipartRequest('POST', url);
         data.forEach((key, value) {
           request.fields[key] = value.toString();
         });
@@ -85,12 +81,13 @@ class ApiService {
           ),
         );
 
-        final streamedResponse = await request.send().timeout(const Duration(seconds: 60));
+        // Increased timeout for file uploads to 5 minutes
+        final streamedResponse = await request.send().timeout(const Duration(seconds: 300));
         final response = await http.Response.fromStream(streamedResponse);
         return _handleResponse(response, endpoint);
       } else {
         final response = await http.post(
-          Uri.parse('$baseUrl/$mappedEndpoint'),
+          url,
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
@@ -100,6 +97,7 @@ class ApiService {
         return _handleResponse(response, endpoint);
       }
     } catch (e) {
+      if (kDebugMode) print('❌ API POST Error: $e');
       return {'success': false, 'message': 'فشل الاتصال بالخادم: ${e.toString()}'};
     }
   }
@@ -112,7 +110,10 @@ class ApiService {
   }) async {
     try {
       final mappedEndpoint = _mapEndpoint(endpoint);
-      final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/$mappedEndpoint'));
+      final url = Uri.parse('$baseUrl/$mappedEndpoint');
+      if (kDebugMode) print('📡 API POST (Multi): $url');
+
+      final request = http.MultipartRequest('POST', url);
       data.forEach((key, value) {
         request.fields[key] = value.toString();
       });
@@ -129,10 +130,12 @@ class ApiService {
         );
       }
 
-      final streamedResponse = await request.send();
+      // Increased timeout for file uploads to 5 minutes
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 300));
       final response = await http.Response.fromStream(streamedResponse);
       return _handleResponse(response, endpoint);
     } catch (e) {
+      if (kDebugMode) print('❌ API POST (Multi) Error: $e');
       return {'success': false, 'message': 'فشل الاتصال بالخادم: ${e.toString()}'};
     }
   }
@@ -140,9 +143,13 @@ class ApiService {
   static Future<Map<String, dynamic>> get(String endpoint) async {
     try {
       final mappedEndpoint = _mapEndpoint(endpoint);
-      final response = await http.get(Uri.parse('$baseUrl/$mappedEndpoint'));
+      final url = Uri.parse('$baseUrl/$mappedEndpoint');
+      if (kDebugMode) print('📡 API GET: $url');
+
+      final response = await http.get(url).timeout(const Duration(seconds: 60));
       return _handleResponse(response, endpoint);
     } catch (e) {
+      if (kDebugMode) print('❌ API GET Error: $e');
       return {'success': false, 'message': 'فشل الاتصال بالخادم: ${e.toString()}'};
     }
   }
@@ -150,7 +157,10 @@ class ApiService {
   static Future<Map<String, dynamic>> upload(String endpoint, File file, {String fieldName = 'media'}) async {
     try {
       final mappedEndpoint = _mapEndpoint(endpoint);
-      final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/$mappedEndpoint'));
+      final url = Uri.parse('$baseUrl/$mappedEndpoint');
+      if (kDebugMode) print('📡 API UPLOAD: $url');
+
+      final request = http.MultipartRequest('POST', url);
       
       final fileExtension = path.extension(file.path).toLowerCase();
       final mimeType = _getMimeType(fileExtension);
@@ -163,22 +173,29 @@ class ApiService {
         ),
       );
 
-      final streamedResponse = await request.send();
+      // Increased timeout to 5 minutes for direct uploads
+      final streamedResponse = await request.send().timeout(const Duration(seconds: 300));
       final response = await http.Response.fromStream(streamedResponse);
 
       return _handleResponse(response, endpoint);
     } catch (e) {
+      if (kDebugMode) print('❌ API UPLOAD Error: $e');
       return {'success': false, 'message': 'فشل رفع الملف: ${e.toString()}'};
     }
   }
 
   static Map<String, dynamic> _handleResponse(http.Response response, String endpoint) {
+    if (kDebugMode) {
+      print('📥 Response from $endpoint: [${response.statusCode}]');
+      print('📄 Body: ${response.body}');
+    }
     final responseBody = response.body;
 
     if (response.statusCode >= 200 && response.statusCode < 300) {
       try {
         return jsonDecode(responseBody);
       } catch (e) {
+        if (kDebugMode) print('❌ JSON Decode Error: $e');
         return {'success': false, 'message': 'خطأ في تحليل البيانات من السيرفر'};
       }
     } else {

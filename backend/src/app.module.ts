@@ -8,11 +8,13 @@ import { StoryModule } from './stories/stories.module';
 import { ChatModule } from './chat/chat.module';
 import { CommentModule } from './comments/comments.module';
 import { MulterModule } from '@nestjs/platform-express';
+import { CloudinaryModule } from './cloudinary/cloudinary.module';
 
 @Module({
   imports: [
     PrismaModule,
     AuthModule,
+    CloudinaryModule,
     PostModule,
     UserModule,
     StoryModule,

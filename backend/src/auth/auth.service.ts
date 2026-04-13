@@ -2,10 +2,14 @@ import { Injectable, ConflictException, NotFoundException, UnauthorizedException
 import { PrismaService } from '../prisma/prisma.service';
 import * as bcrypt from 'bcryptjs';
 import * as jwt from 'jsonwebtoken';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 
 @Injectable()
 export class AuthService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private cloudinary: CloudinaryService
+  ) {}
 
   async register(data: any) {
     const { name, email, password, phone, photo, username } = data;
@@ -69,12 +73,20 @@ export class AuthService {
     };
   }
 
-  async updateProfile(data: any) {
-    const { user_id, name, bio, phone, photo } = data;
+  async updateProfileWithCloudinary(data: any, file?: Express.Multer.File) {
+    const { user_id, name, bio, phone } = data;
+    let photoUrl = data.photo;
+
+    if (file) {
+      const result = await this.cloudinary.uploadFile(file);
+      photoUrl = result.secure_url;
+    }
+
     const user = await this.prisma.user.update({
       where: { id: parseInt(user_id) },
-      data: { name, bio, phone, photo }
+      data: { name, bio, phone, photo: photoUrl }
     });
+    
     return {
       id: user.id,
       name: user.name,
@@ -89,22 +101,36 @@ export class AuthService {
     };
   }
 
-  async updateProfileV2(data: any) {
-    const { user_id, name, bio, phone, photo, coverPhoto, profileLinks, tags, musicTrack, musicTitle } = data;
+  async updateProfileV2WithCloudinary(data: any, files: { photo?: Express.Multer.File[], coverPhoto?: Express.Multer.File[] }) {
+    const { user_id, name, bio, phone, profileLinks, tags, musicTrack, musicTitle } = data;
+    let photoUrl = data.photo;
+    let coverPhotoUrl = data.coverPhoto;
+
+    if (files.photo && files.photo[0]) {
+      const result = await this.cloudinary.uploadFile(files.photo[0]);
+      photoUrl = result.secure_url;
+    }
+
+    if (files.coverPhoto && files.coverPhoto[0]) {
+      const result = await this.cloudinary.uploadFile(files.coverPhoto[0]);
+      coverPhotoUrl = result.secure_url;
+    }
+
     const user = await this.prisma.user.update({
       where: { id: parseInt(user_id) },
       data: {
         name,
         bio,
         phone,
-        photo,
-        coverPhoto,
+        photo: photoUrl,
+        coverPhoto: coverPhotoUrl,
         profileLinks: Array.isArray(profileLinks) ? profileLinks : [],
         tags: Array.isArray(tags) ? tags : [],
         musicTrack,
         musicTitle,
       },
     });
+
     return {
       id: user.id,
       name: user.name,
@@ -118,6 +144,14 @@ export class AuthService {
       musicTrack: user.musicTrack,
       musicTitle: user.musicTitle,
     };
+  }
+
+  async updateProfile(data: any) {
+    return this.updateProfileWithCloudinary(data);
+  }
+
+  async updateProfileV2(data: any) {
+    return this.updateProfileV2WithCloudinary(data, {});
   }
 
   async switchAccount(userId: string) {

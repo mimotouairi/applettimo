@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CloudinaryService } from '../cloudinary/cloudinary.service';
 
 @Injectable()
 export class StoryService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private cloudinary: CloudinaryService
+  ) {}
 
   async getStories(userId: number) {
     const stories = await this.prisma.story.findMany({
@@ -45,6 +49,17 @@ export class StoryService {
     }, {});
 
     return Object.values(grouped);
+  }
+
+  async addStoryWithCloudinary(userId: number, file: Express.Multer.File, mediaType: string) {
+    const result = await this.cloudinary.uploadFile(file);
+    return this.prisma.story.create({
+      data: {
+        userId,
+        mediaUrl: result.secure_url,
+        mediaType,
+      },
+    });
   }
 
   async addStory(userId: number, mediaUrl: string, mediaType: string) {
