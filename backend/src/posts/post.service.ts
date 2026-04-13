@@ -193,36 +193,44 @@ export class PostService {
   }
 
   async createPostWithCloudinary(data: any, file?: Express.Multer.File) {
-    const { user_id, content, privacy, media_type } = data;
-    let url = null;
-    let type = media_type || 'text';
+    try {
+      const { user_id, content, privacy, media_type } = data;
+      console.log(`[PostService] Creating post for user: ${user_id}`);
+      
+      let url = null;
+      let type = media_type || 'text';
 
-    if (file) {
-      const result = await this.cloudinary.uploadFile(file);
-      url = result.secure_url;
-      type = file.mimetype.startsWith('video') ? 'video' : 'image';
-    }
-
-    const post = await this.prisma.post.create({
-      data: {
-        userId: parseInt(user_id),
-        content,
-        privacy: privacy || 'public',
-        mediaType: type,
-        mediaUrl: url
-      },
-      include: {
-        user: { select: { id: true, name: true, username: true, photo: true } },
-        _count: { select: { likes: true, comments: true } },
-        mediaItems: { orderBy: { position: 'asc' } },
+      if (file) {
+        const result = await this.cloudinary.uploadFile(file);
+        url = result.secure_url;
+        type = file.mimetype.startsWith('video') ? 'video' : 'image';
       }
-    });
 
-    if (content) {
-      this.notifyMentions(content, parseInt(user_id), post.id);
+      const post = await this.prisma.post.create({
+        data: {
+          userId: parseInt(user_id),
+          content,
+          privacy: privacy || 'public',
+          mediaType: type,
+          mediaUrl: url
+        },
+        include: {
+          user: { select: { id: true, name: true, username: true, photo: true } },
+          _count: { select: { likes: true, comments: true } },
+          mediaItems: { orderBy: { position: 'asc' } },
+        }
+      });
+
+      if (content) {
+        this.notifyMentions(content, parseInt(user_id), post.id);
+      }
+
+      console.log(`[PostService] Post created successfully: ${post.id}`);
+      return this.formatPostForFlutter(post);
+    } catch (error) {
+      console.error('[PostService] Error creating post:', error);
+      throw error;
     }
-
-    return this.formatPostForFlutter(post);
   }
 
   async createPostMultiWithCloudinary(data: any, files: Express.Multer.File[] = []) {

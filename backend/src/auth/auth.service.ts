@@ -74,76 +74,90 @@ export class AuthService {
   }
 
   async updateProfileWithCloudinary(data: any, file?: Express.Multer.File) {
-    const { user_id, name, bio, phone } = data;
-    let photoUrl = data.photo;
+    try {
+      const { user_id, name, bio, phone } = data;
+      console.log(`[AuthService] Updating profile for user: ${user_id}`);
+      let photoUrl = data.photo;
 
-    if (file) {
-      const result = await this.cloudinary.uploadFile(file);
-      photoUrl = result.secure_url;
+      if (file) {
+        const result = await this.cloudinary.uploadFile(file);
+        photoUrl = result.secure_url;
+      }
+
+      const user = await this.prisma.user.update({
+        where: { id: parseInt(user_id) },
+        data: { name, bio, phone, photo: photoUrl }
+      });
+      
+      console.log(`[AuthService] Profile updated successfully for user: ${user_id}`);
+      return {
+        id: user.id,
+        name: user.name,
+        username: user.username,
+        email: user.email,
+        bio: user.bio,
+        photo: user.photo,
+        coverPhoto: user.coverPhoto,
+        profileLinks: user.profileLinks,
+        tags: user.tags,
+        musicTrack: user.musicTrack,
+      };
+    } catch (error) {
+      console.error('[AuthService] Error updating profile:', error);
+      throw error;
     }
-
-    const user = await this.prisma.user.update({
-      where: { id: parseInt(user_id) },
-      data: { name, bio, phone, photo: photoUrl }
-    });
-    
-    return {
-      id: user.id,
-      name: user.name,
-      username: user.username,
-      email: user.email,
-      bio: user.bio,
-      photo: user.photo,
-      coverPhoto: user.coverPhoto,
-      profileLinks: user.profileLinks,
-      tags: user.tags,
-      musicTrack: user.musicTrack,
-    };
   }
 
   async updateProfileV2WithCloudinary(data: any, files: { photo?: Express.Multer.File[], coverPhoto?: Express.Multer.File[] }) {
-    const { user_id, name, bio, phone, profileLinks, tags, musicTrack, musicTitle } = data;
-    let photoUrl = data.photo;
-    let coverPhotoUrl = data.coverPhoto;
+    try {
+      const { user_id, name, bio, phone, profileLinks, tags, musicTrack, musicTitle } = data;
+      console.log(`[AuthService] Updating profile V2 for user: ${user_id}`);
+      let photoUrl = data.photo;
+      let coverPhotoUrl = data.coverPhoto;
 
-    if (files.photo && files.photo[0]) {
-      const result = await this.cloudinary.uploadFile(files.photo[0]);
-      photoUrl = result.secure_url;
+      if (files.photo && files.photo[0]) {
+        const result = await this.cloudinary.uploadFile(files.photo[0]);
+        photoUrl = result.secure_url;
+      }
+
+      if (files.coverPhoto && files.coverPhoto[0]) {
+        const result = await this.cloudinary.uploadFile(files.coverPhoto[0]);
+        coverPhotoUrl = result.secure_url;
+      }
+
+      const user = await this.prisma.user.update({
+        where: { id: parseInt(user_id) },
+        data: {
+          name,
+          bio,
+          phone,
+          photo: photoUrl,
+          coverPhoto: coverPhotoUrl,
+          profileLinks: Array.isArray(profileLinks) ? profileLinks : [],
+          tags: Array.isArray(tags) ? tags : [],
+          musicTrack,
+          musicTitle,
+        },
+      });
+
+      console.log(`[AuthService] Profile V2 updated successfully for user: ${user_id}`);
+      return {
+        id: user.id,
+        name: user.name,
+        username: user.username,
+        email: user.email,
+        bio: user.bio,
+        photo: user.photo,
+        coverPhoto: user.coverPhoto,
+        profileLinks: user.profileLinks,
+        tags: user.tags,
+        musicTrack: user.musicTrack,
+        musicTitle: user.musicTitle,
+      };
+    } catch (error) {
+      console.error('[AuthService] Error updating profile V2:', error);
+      throw error;
     }
-
-    if (files.coverPhoto && files.coverPhoto[0]) {
-      const result = await this.cloudinary.uploadFile(files.coverPhoto[0]);
-      coverPhotoUrl = result.secure_url;
-    }
-
-    const user = await this.prisma.user.update({
-      where: { id: parseInt(user_id) },
-      data: {
-        name,
-        bio,
-        phone,
-        photo: photoUrl,
-        coverPhoto: coverPhotoUrl,
-        profileLinks: Array.isArray(profileLinks) ? profileLinks : [],
-        tags: Array.isArray(tags) ? tags : [],
-        musicTrack,
-        musicTitle,
-      },
-    });
-
-    return {
-      id: user.id,
-      name: user.name,
-      username: user.username,
-      email: user.email,
-      bio: user.bio,
-      photo: user.photo,
-      coverPhoto: user.coverPhoto,
-      profileLinks: user.profileLinks,
-      tags: user.tags,
-      musicTrack: user.musicTrack,
-      musicTitle: user.musicTitle,
-    };
   }
 
   async updateProfile(data: any) {

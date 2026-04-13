@@ -52,14 +52,24 @@ export class StoryService {
   }
 
   async addStoryWithCloudinary(userId: number, file: Express.Multer.File, mediaType: string) {
-    const result = await this.cloudinary.uploadFile(file);
-    return this.prisma.story.create({
-      data: {
-        userId,
-        mediaUrl: result.secure_url,
-        mediaType,
-      },
-    });
+    try {
+      console.log(`[StoryService] Adding story for user: ${userId}`);
+      const result = await this.cloudinary.uploadFile(file);
+      
+      const story = await this.prisma.story.create({
+        data: {
+          userId,
+          mediaUrl: result.secure_url,
+          mediaType,
+        },
+      });
+
+      console.log(`[StoryService] Story created successfully: ${story.id}`);
+      return story;
+    } catch (error) {
+      console.error('[StoryService] Error adding story:', error);
+      throw error;
+    }
   }
 
   async addStory(userId: number, mediaUrl: string, mediaType: string) {
