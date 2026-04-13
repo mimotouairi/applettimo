@@ -9,7 +9,11 @@ export class CloudinaryService {
     return new Promise((resolve, reject) => {
       const upload = cloudinary.uploader.upload_stream((error, result) => {
         if (error) return reject(error);
-        resolve(result);
+        if (result) {
+          resolve(result);
+        } else {
+          reject(new Error('Cloudinary upload returned undefined result'));
+        }
       });
 
       streamifier.createReadStream(file.buffer).pipe(upload);
