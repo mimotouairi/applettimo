@@ -22,6 +22,9 @@ import { CloudinaryModule } from './cloudinary/cloudinary.module';
     CommentModule,
     MulterModule.register({
       dest: './uploads',
+      limits: {
+        fileSize: 100 * 1024 * 1024, // 100MB
+      },
     }),
   ],
   controllers: [AppController],

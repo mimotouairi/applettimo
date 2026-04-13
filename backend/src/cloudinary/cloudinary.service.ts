@@ -9,7 +9,9 @@ export class CloudinaryService {
     console.log(`[Cloudinary] Starting upload: ${file.originalname} (${file.mimetype})`);
     try {
       return await new Promise((resolve, reject) => {
-        const upload = cloudinary.uploader.upload_stream((error, result) => {
+        const upload = cloudinary.uploader.upload_stream(
+          { resource_type: 'auto' },
+          (error, result) => {
           if (error) {
             console.error('[Cloudinary] Upload Error:', error);
             return reject(error);
