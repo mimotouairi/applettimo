@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:video_player/video_player.dart';
 import '../../providers/post_provider.dart';
-import '../../providers/theme_provider.dart';
 import '../../models/post.dart';
 import '../../services/api_service.dart';
 import 'package:go_router/go_router.dart';
@@ -10,7 +9,8 @@ import '../../navigation/app_router.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 
 class VideoFeedScreen extends StatefulWidget {
-  const VideoFeedScreen({super.key});
+  final String? initialVideoPostId;
+  const VideoFeedScreen({super.key, this.initialVideoPostId});
 
   @override
   State<VideoFeedScreen> createState() => _VideoFeedScreenState();
@@ -20,20 +20,64 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
   late PageController _pageController;
   int _currentIndex = 0;
   bool _isScreenVisible = true;
+  final Map<String, VideoPlayerController> _preloadedControllers = {};
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
-    Future.microtask(() => 
-      Provider.of<PostProvider>(context, listen: false).fetchVideos()
-    );
+    Future.microtask(() async {
+      await Provider.of<PostProvider>(context, listen: false).fetchVideos();
+      _jumpToInitialVideoIfNeeded();
+    });
+  }
+
+  void _jumpToInitialVideoIfNeeded() {
+    final targetId = widget.initialVideoPostId;
+    if (targetId == null) return;
+    final videos = Provider.of<PostProvider>(context, listen: false).videoPosts;
+    final index = videos.indexWhere((v) => v.id == targetId);
+    if (index <= 0) return;
+    _currentIndex = index;
+    if (_pageController.hasClients) {
+      _pageController.jumpToPage(index);
+    }
   }
 
   @override
   void dispose() {
+    for (final controller in _preloadedControllers.values) {
+      controller.dispose();
+    }
     _pageController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant VideoFeedScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.initialVideoPostId != widget.initialVideoPostId) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToInitialVideoIfNeeded());
+    }
+  }
+
+  Future<void> _preloadNextVideo(List<Post> videos, int currentIndex) async {
+    final nextIndex = currentIndex + 1;
+    if (nextIndex >= videos.length) return;
+    final nextPost = videos[nextIndex];
+    final key = nextPost.id;
+    if (_preloadedControllers.containsKey(key)) return;
+    final url = ApiService.getImageUrl(nextPost.mediaUrl);
+    if (url == null) return;
+
+    final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+    try {
+      await controller.initialize();
+      controller.setVolume(0);
+      _preloadedControllers[key] = controller;
+    } catch (_) {
+      controller.dispose();
+    }
   }
 
   @override
@@ -87,6 +131,7 @@ class _VideoFeedScreenState extends State<VideoFeedScreen> {
             setState(() {
               _currentIndex = index;
             });
+            _preloadNextVideo(videos, index);
           },
           itemBuilder: (context, index) {
             return VideoPlayerItem(
@@ -121,6 +166,7 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> with WidgetsBindingOb
   String? _error;
   bool _isBackground = false;
   bool _isRoutePushed = false;
+  bool _isVisibleEnough = false;
 
   @override
   void initState() {
@@ -171,10 +217,8 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> with WidgetsBindingOb
             _isInitialized = true;
             _error = null;
           });
-          if (widget.isActive) {
-            _controller.play();
-            _controller.setLooping(true);
-          }
+          _controller.setLooping(true);
+          _syncPlaybackState();
         }
       }).catchError((e) {
         debugPrint('VideoFeed init error: $e');
@@ -189,7 +233,14 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> with WidgetsBindingOb
   @override
   void didUpdateWidget(VideoPlayerItem oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.isActive && !_isBackground && !_isRoutePushed) {
+    _syncPlaybackState();
+  }
+
+  void _syncPlaybackState() {
+    if (!_isInitialized) return;
+    final shouldPlay =
+        widget.isActive && _isVisibleEnough && !_isBackground && !_isRoutePushed;
+    if (shouldPlay) {
       _controller.play();
     } else {
       _controller.pause();
@@ -206,35 +257,44 @@ class _VideoPlayerItemState extends State<VideoPlayerItem> with WidgetsBindingOb
 
   @override
   Widget build(BuildContext context) {
-    final themeProvider = Provider.of<ThemeProvider>(context);
     return Stack(
       fit: StackFit.expand,
       children: [
         // Video Player
         if (_isInitialized)
-          GestureDetector(
-            onTap: () {
-              if (_controller.value.isPlaying) {
-                _controller.pause();
-              } else {
-                _controller.play();
+          VisibilityDetector(
+            key: Key('video-item-${widget.post.id}'),
+            onVisibilityChanged: (info) {
+              final newVisible = info.visibleFraction >= 0.75;
+              if (newVisible != _isVisibleEnough) {
+                _isVisibleEnough = newVisible;
+                _syncPlaybackState();
               }
-              setState(() {});
             },
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 80), // Centered with space for UI
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(40),
-                color: Colors.black12,
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: FittedBox(
-                fit: BoxFit.contain, // Prevent cropping/zoom
-                clipBehavior: Clip.hardEdge,
-                child: SizedBox(
-                  width: _controller.value.size.width,
-                  height: _controller.value.size.height,
-                  child: VideoPlayer(_controller),
+            child: GestureDetector(
+              onTap: () {
+                if (_controller.value.isPlaying) {
+                  _controller.pause();
+                } else if (widget.isActive && _isVisibleEnough && !_isBackground && !_isRoutePushed) {
+                  _controller.play();
+                }
+                setState(() {});
+              },
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 80),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(40),
+                  color: Colors.black12,
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: FittedBox(
+                  fit: BoxFit.contain,
+                  clipBehavior: Clip.hardEdge,
+                  child: SizedBox(
+                    width: _controller.value.size.width,
+                    height: _controller.value.size.height,
+                    child: VideoPlayer(_controller),
+                  ),
                 ),
               ),
             ),

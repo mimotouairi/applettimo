@@ -23,4 +23,16 @@ export class AuthController {
     const result = await this.authService.updateProfile(body);
     return { success: true, data: result };
   }
+
+  @Post('update_profile_v2')
+  async updateProfileV2(@Body() body: any) {
+    const result = await this.authService.updateProfileV2(body);
+    return { success: true, data: result };
+  }
+
+  @Post('switch_account')
+  async switchAccount(@Body() body: any) {
+    const result = await this.authService.switchAccount(body.user_id);
+    return { success: true, data: result };
+  }
 }

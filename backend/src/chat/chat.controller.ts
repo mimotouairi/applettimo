@@ -19,8 +19,9 @@ export class ChatController {
 
   @Post('send_message')
   async sendMessage(@Body() body: any) {
-    const { sender_id, receiver_id, content } = body;
-    const result = await this.chatService.sendMessage(parseInt(sender_id), parseInt(receiver_id), content);
+    const { sender_id, receiver_id, content, message } = body;
+    const finalContent = content || message || '';
+    const result = await this.chatService.sendMessage(parseInt(sender_id), parseInt(receiver_id), finalContent);
     return { success: true, data: result };
   }
 }

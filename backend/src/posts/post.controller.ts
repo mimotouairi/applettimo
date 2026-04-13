@@ -1,8 +1,9 @@
-import { Controller, Get, Post, Body, Query, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Get, Post, Body, Query, UseInterceptors, UploadedFile, UploadedFiles } from '@nestjs/common';
 import { PostService } from './post.service';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
-import { extname } from 'path';
+import { extname, join } from 'path';
+import { mkdirSync } from 'fs';
 
 @Controller('posts')
 export class PostController {
@@ -26,10 +27,20 @@ export class PostController {
     return { success: true, data: result };
   }
 
+  @Get('get_post')
+  async getPost(@Query('user_id') user_id: string, @Query('post_id') post_id: string) {
+    const result = await this.postService.getPostById(user_id, post_id);
+    return { success: true, data: result };
+  }
+
   @Post('create_post')
   @UseInterceptors(FileInterceptor('media', {
     storage: diskStorage({
-      destination: './uploads',
+      destination: (req, file, cb) => {
+        const uploadPath = join(process.cwd(), 'uploads');
+        mkdirSync(uploadPath, { recursive: true });
+        cb(null, uploadPath);
+      },
       filename: (req, file, cb) => {
         const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
         cb(null, uniqueSuffix + extname(file.originalname));
@@ -38,6 +49,27 @@ export class PostController {
   }))
   async createPost(@Body() body: any, @UploadedFile() file: Express.Multer.File) {
     const result = await this.postService.createPost(body, file);
+    return { success: true, data: result };
+  }
+
+  @Post('create_post_multi')
+  @UseInterceptors(
+    FilesInterceptor('media', 10, {
+      storage: diskStorage({
+        destination: (req, file, cb) => {
+          const uploadPath = join(process.cwd(), 'uploads');
+          mkdirSync(uploadPath, { recursive: true });
+          cb(null, uploadPath);
+        },
+        filename: (req, file, cb) => {
+          const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+          cb(null, uniqueSuffix + extname(file.originalname));
+        },
+      }),
+    }),
+  )
+  async createPostMulti(@Body() body: any, @UploadedFiles() files: Express.Multer.File[]) {
+    const result = await this.postService.createPostMulti(body, files || []);
     return { success: true, data: result };
   }
 
@@ -59,6 +91,13 @@ export class PostController {
   async toggleSave(@Body() body: any) {
     const { user_id, post_id } = body;
     const result = await this.postService.toggleSave(user_id, post_id);
+    return { success: true, ...result };
+  }
+
+  @Post('mark_view')
+  async markView(@Body() body: any) {
+    const { user_id, post_id } = body;
+    const result = await this.postService.markView(user_id, post_id);
     return { success: true, ...result };
   }
 

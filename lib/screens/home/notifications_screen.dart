@@ -2,50 +2,91 @@ import 'package:animate_do/animate_do.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
+import '../../providers/notification_provider.dart';
+import '../../providers/post_provider.dart';
 import '../../providers/theme_provider.dart';
+import '../../services/api_service.dart';
 
-class NotificationsScreen extends StatelessWidget {
+class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
 
-  final List<Map<String, dynamic>> _mockNotifications = const [
-    {
-      'type': 'like',
-      'user_name': 'مريم أحمد',
-      'avatar': 'https://i.pravatar.cc/150?u=1',
-      'time': 'منذ 5 د',
-      'content': 'أعجبت بمنشورك "كيف تبدأ في تعلم البرمجة؟"',
-      'is_new': true,
-    },
-    {
-      'type': 'comment',
-      'user_name': 'يوسف خالد',
-      'avatar': 'https://i.pravatar.cc/150?u=2',
-      'time': 'منذ 1 س',
-      'content': 'علق على منشورك: "معلومات قيمة جداً، شكراً لك!"',
-      'is_new': true,
-    },
-    {
-      'type': 'follow',
-      'user_name': 'سارة محمد',
-      'avatar': 'https://i.pravatar.cc/150?u=3',
-      'time': 'منذ 3 س',
-      'content': 'بدأت بمتابعتك',
-      'is_new': false,
-    },
-    {
-      'type': 'like',
-      'user_name': 'خالد عبدالله',
-      'avatar': 'https://i.pravatar.cc/150?u=4',
-      'time': 'منذ 5 س',
-      'content': 'أعجب بصورتك الجديدة',
-      'is_new': false,
-    },
-  ];
+  @override
+  State<NotificationsScreen> createState() => _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends State<NotificationsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      Provider.of<NotificationProvider>(context, listen: false)
+          .fetchNotifications();
+    });
+  }
+
+  Future<void> _markAllAsRead() async {
+    await Provider.of<NotificationProvider>(context, listen: false)
+        .markAllAsRead();
+  }
+
+  Future<void> _onNotificationTap(Map<String, dynamic> notification) async {
+    final notificationProvider = Provider.of<NotificationProvider>(context, listen: false);
+    final id = notification['id']?.toString();
+    if (id != null && notification['isRead'] == false) {
+      await notificationProvider.markAsRead(id);
+    }
+
+    final type = notification['type']?.toString();
+    final actorId = (notification['actor'] as Map<String, dynamic>?)?['id']?.toString();
+    final postId = notification['postId']?.toString();
+
+    if ((type == 'like' || type == 'comment') && postId != null) {
+      final postProvider = Provider.of<PostProvider>(context, listen: false);
+      final result = await postProvider.fetchPostById(postId);
+      if (result['success'] == true && mounted) {
+        context.push('/post-details', extra: result['data']);
+        return;
+      }
+    }
+
+    if (type == 'follow' && actorId != null) {
+      context.push('/user-profile/$actorId');
+      return;
+    }
+    if (actorId != null) {
+      context.push('/user-profile/$actorId');
+    }
+  }
+
+  Future<void> _handleFollowBack(Map<String, dynamic> notification) async {
+    final actorId = (notification['actor'] as Map<String, dynamic>?)?['id']?.toString();
+    if (actorId == null) return;
+    final postProvider = Provider.of<PostProvider>(context, listen: false);
+    await postProvider.toggleFollow(actorId);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('تم تنفيذ طلب المتابعة')),
+      );
+    }
+  }
+
+  String _formatTime(String? iso) {
+    if (iso == null) return 'الآن';
+    final dt = DateTime.tryParse(iso);
+    if (dt == null) return 'الآن';
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'الآن';
+    if (diff.inMinutes < 60) return 'منذ ${diff.inMinutes} د';
+    if (diff.inHours < 24) return 'منذ ${diff.inHours} س';
+    return 'منذ ${diff.inDays} ي';
+  }
 
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
+    final notificationProvider = Provider.of<NotificationProvider>(context);
     final colors = themeProvider.colors;
+    final notifications = notificationProvider.notifications;
 
     return Scaffold(
       backgroundColor: colors.background,
@@ -64,8 +105,16 @@ class NotificationsScreen extends StatelessWidget {
             fontSize: 22,
           ),
         ),
+        actions: [
+          TextButton(
+            onPressed: _markAllAsRead,
+            child: const Text('تعيين الكل كمقروء'),
+          ),
+        ],
       ),
-      body: _mockNotifications.isEmpty
+      body: notificationProvider.loading
+          ? const Center(child: CircularProgressIndicator())
+          : notifications.isEmpty
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -85,10 +134,10 @@ class NotificationsScreen extends StatelessWidget {
               ),
             )
           : ListView.builder(
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              itemCount: _mockNotifications.length,
+              padding: const EdgeInsets.fromLTRB(0, 16, 0, 120), // Added bottom padding for floating navbar
+              itemCount: notifications.length,
               itemBuilder: (context, index) {
-                final notification = _mockNotifications[index];
+                final notification = notifications[index];
                 return FadeInUp(
                   duration: Duration(milliseconds: 300 + (index * 100)),
                   child: _buildNotificationItem(notification, colors),
@@ -120,20 +169,27 @@ class NotificationsScreen extends StatelessWidget {
         iconColor = colors.primary;
     }
 
-    return Container(
-      color: notification['is_new']
-          ? colors.primary.withValues(alpha: 0.05)
-          : Colors.transparent,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    final actor = notification['actor'] as Map<String, dynamic>?;
+    final actorName = actor?['name'] ?? 'مستخدم';
+    final avatarUrl = ApiService.getImageUrl(actor?['photo']);
+
+    return InkWell(
+      onTap: () => _onNotificationTap(notification),
+      child: Container(
+        color: notification['isRead'] == false
+            ? colors.primary.withValues(alpha: 0.05)
+            : Colors.transparent,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           Stack(
             children: [
               CircleAvatar(
                 radius: 26,
-                backgroundImage: NetworkImage(notification['avatar']),
+                backgroundImage: avatarUrl != null ? NetworkImage(avatarUrl) : null,
                 backgroundColor: colors.surface,
+                child: avatarUrl == null ? const Icon(Icons.person) : null,
               ),
               Positioned(
                 bottom: 0,
@@ -160,18 +216,18 @@ class NotificationsScreen extends StatelessWidget {
                     style: TextStyle(color: colors.text, fontSize: 14, fontFamily: 'ExpoArabic', height: 1.4),
                     children: [
                       TextSpan(
-                        text: notification['user_name'] + ' ',
+                        text: '$actorName ',
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       TextSpan(
-                        text: notification['content'],
+                        text: notification['body'] ?? '',
                       ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  notification['time'],
+                  _formatTime(notification['createdAt']),
                   style: TextStyle(
                     color: colors.textSecondary,
                     fontSize: 12,
@@ -181,11 +237,11 @@ class NotificationsScreen extends StatelessWidget {
               ],
             ),
           ),
-          if (notification['type'] == 'follow')
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: ElevatedButton(
-                onPressed: () {},
+            if (notification['type'] == 'follow')
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: ElevatedButton(
+                  onPressed: () => _handleFollowBack(notification),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: colors.primary,
                   foregroundColor: Colors.white,
@@ -197,8 +253,9 @@ class NotificationsScreen extends StatelessWidget {
                 ),
                 child: const Text('رد المتابعة', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
               ),
-            ),
-        ],
+              ),
+          ],
+        ),
       ),
     );
   }

@@ -35,4 +35,27 @@ export class UserController {
     const result = await this.userService.getUserStats(user_id);
     return { success: true, data: result };
   }
+
+  @Get('get_notifications')
+  async getNotifications(@Query('user_id') user_id: string) {
+    const result = await this.userService.getNotifications(user_id);
+    return { success: true, data: result };
+  }
+
+  @Post('mark_notification_read')
+  async markNotificationRead(@Body() body: any) {
+    const { user_id, notification_id } = body;
+    const result = await this.userService.markNotificationRead(
+      user_id,
+      notification_id,
+    );
+    return result;
+  }
+
+  @Post('mark_all_notifications_read')
+  async markAllNotificationsRead(@Body() body: any) {
+    const { user_id } = body;
+    const result = await this.userService.markAllNotificationsRead(user_id);
+    return result;
+  }
 }

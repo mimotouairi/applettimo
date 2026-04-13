@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import '../services/notification_service.dart';
 import '../services/api_service.dart';
 import '../services/socket_service.dart';
 import '../providers/auth_provider.dart';
 
 class ChatProvider with ChangeNotifier {
-  final AuthProvider _authProvider;
+  AuthProvider _authProvider;
   List<Map<String, dynamic>> _conversations = [];
   List<Map<String, dynamic>> _messages = [];
   bool _loadingConversations = false;
@@ -16,6 +17,31 @@ class ChatProvider with ChangeNotifier {
     _initSocket();
   }
 
+  void updateAuth(AuthProvider auth) {
+    if (_authProvider == auth) return;
+    
+    final wasAuthenticated = _authProvider.isAuthenticated;
+    final oldUserId = wasAuthenticated ? (_authProvider.user?['id']?.toString()) : null;
+    
+    _authProvider = auth;
+    
+    final isNowAuthenticated = _authProvider.isAuthenticated;
+    final newUserId = isNowAuthenticated ? (_authProvider.user?['id']?.toString()) : null;
+
+    if (isNowAuthenticated) {
+      if (!wasAuthenticated || oldUserId != newUserId) {
+        SocketService.disconnect();
+        _initSocket();
+        fetchConversations();
+      }
+    } else if (wasAuthenticated) {
+      SocketService.disconnect();
+      _conversations = [];
+      _messages = [];
+      notifyListeners();
+    }
+  }
+
   void _initSocket() {
     if (_authProvider.isAuthenticated) {
       SocketService.connect();
@@ -23,13 +49,24 @@ class ChatProvider with ChangeNotifier {
       
       SocketService.on('new_message', (data) {
         final message = Map<String, dynamic>.from(data);
-        // If we're currently chatting with the sender, add it to the list
         if (_currentChattingWithId == message['senderId'].toString()) {
           _messages.add(message);
           notifyListeners();
         }
-        // Always refresh conversations to show last message
         fetchConversations();
+      });
+
+      SocketService.on('new_notification', (data) {
+        final notification = Map<String, dynamic>.from(data);
+        final actor = notification['actor'];
+        final actorPhoto = actor != null ? ApiService.getImageUrl(actor['photo']) : null;
+        
+        NotificationService.showNotification(
+          id: int.tryParse(notification['id'].toString()) ?? DateTime.now().millisecondsSinceEpoch,
+          title: notification['title'] ?? 'إشعار جديد',
+          body: notification['body'] ?? '',
+          imageUrl: actorPhoto,
+        );
       });
     }
   }
@@ -88,7 +125,7 @@ class ChatProvider with ChangeNotifier {
       final result = await ApiService.post('send_message', {
         'sender_id': userId,
         'receiver_id': receiverId,
-        'message': message,
+        'content': message,
       });
       if (result['success']) {
         final newMessage = Map<String, dynamic>.from(result['data']);

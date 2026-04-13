@@ -12,7 +12,8 @@ class PostProvider with ChangeNotifier {
   List<Map<String, dynamic>> _foundUsers = [];
   bool _loading = false;
   String? _error;
-  final AuthProvider _authProvider;
+  AuthProvider _authProvider;
+  final Set<String> _viewTrackedPostIds = <String>{};
 
   PostProvider(this._authProvider) {
     _authProvider.addListener(_onAuthChanged);
@@ -27,6 +28,14 @@ class PostProvider with ChangeNotifier {
       fetchPosts();
       fetchSavedPosts();
     }
+  }
+
+  void updateAuth(AuthProvider auth) {
+    if (_authProvider == auth) return;
+    _authProvider.removeListener(_onAuthChanged);
+    _authProvider = auth;
+    _authProvider.addListener(_onAuthChanged);
+    _onAuthChanged();
   }
 
   @override
@@ -219,6 +228,8 @@ class PostProvider with ChangeNotifier {
           mediaType: post.mediaType,
           likes: newIsLiked ? post.likes + 1 : post.likes - 1,
           commentsCount: post.commentsCount,
+          viewsCount: post.viewsCount,
+          engagementScore: post.engagementScore,
           createdAt: post.createdAt,
           time: post.time,
           isLiked: newIsLiked,
@@ -258,6 +269,8 @@ class PostProvider with ChangeNotifier {
           mediaType: post.mediaType,
           likes: post.likes,
           commentsCount: post.commentsCount,
+          viewsCount: post.viewsCount,
+          engagementScore: post.engagementScore,
           createdAt: post.createdAt,
           time: post.time,
           isLiked: post.isLiked,
@@ -380,10 +393,44 @@ class PostProvider with ChangeNotifier {
 
   Future<Map<String, dynamic>> fetchComments(String postId) async {
     try {
-      final result = await ApiService.get('get_comments?post_id=$postId');
+      final userId = _authProvider.user?['id'];
+      final result = await ApiService.get(
+        'get_comments?post_id=$postId${userId != null ? '&user_id=$userId' : ''}',
+      );
       return result;
     } catch (e) {
       return {'success': false, 'error': 'فشل في جلب التعليقات'};
+    }
+  }
+
+  Future<Map<String, dynamic>> fetchPostById(String postId) async {
+    if (!_authProvider.isAuthenticated) {
+      return {'success': false, 'error': 'يجب تسجيل الدخول'};
+    }
+    final existing = _posts.cast<Post?>().firstWhere(
+      (p) => p?.id == postId,
+      orElse: () => null,
+    );
+    if (existing != null) {
+      return {'success': true, 'data': existing};
+    }
+    try {
+      final userId = _authProvider.user!['id'];
+      final result = await ApiService.get('get_post?user_id=$userId&post_id=$postId');
+      if (result['success']) {
+        final post = Post.fromJson(result['data']);
+        final index = _posts.indexWhere((p) => p.id == post.id);
+        if (index == -1) {
+          _posts.insert(0, post);
+        } else {
+          _posts[index] = post;
+        }
+        notifyListeners();
+        return {'success': true, 'data': post};
+      }
+      return {'success': false, 'error': result['message'] ?? 'تعذر جلب المنشور'};
+    } catch (e) {
+      return {'success': false, 'error': 'تعذر جلب المنشور'};
     }
   }
 
@@ -415,6 +462,8 @@ class PostProvider with ChangeNotifier {
             mediaType: post.mediaType,
             likes: post.likes,
             commentsCount: post.commentsCount + 1,
+            viewsCount: post.viewsCount,
+            engagementScore: post.engagementScore,
             createdAt: post.createdAt,
             time: post.time,
             isLiked: post.isLiked,
@@ -426,6 +475,42 @@ class PostProvider with ChangeNotifier {
       return result;
     } catch (e) {
       return {'success': false, 'error': 'فشل إضافة التعليق'};
+    }
+  }
+
+  Future<Map<String, dynamic>> addReply(
+    String postId,
+    String parentCommentId,
+    String comment,
+  ) async {
+    if (!_authProvider.isAuthenticated) {
+      return {'success': false, 'error': 'يجب تسجيل الدخول'};
+    }
+    final userId = _authProvider.user!['id'];
+    try {
+      return await ApiService.post('add_comment', {
+        'post_id': postId,
+        'user_id': userId,
+        'comment': comment,
+        'parent_id': parentCommentId,
+      });
+    } catch (e) {
+      return {'success': false, 'error': 'فشل إضافة الرد'};
+    }
+  }
+
+  Future<Map<String, dynamic>> toggleCommentLike(String commentId) async {
+    if (!_authProvider.isAuthenticated) {
+      return {'success': false, 'error': 'يجب تسجيل الدخول'};
+    }
+    final userId = _authProvider.user!['id'];
+    try {
+      return await ApiService.post('toggle_comment_like', {
+        'comment_id': commentId,
+        'user_id': userId,
+      });
+    } catch (e) {
+      return {'success': false, 'error': 'فشل التفاعل مع التعليق'};
     }
   }
 
@@ -462,6 +547,36 @@ class PostProvider with ChangeNotifier {
     }
   }
 
+  Future<Map<String, dynamic>> addPostMultiImage(
+    String content,
+    List<File> images,
+    String privacy,
+  ) async {
+    if (!_authProvider.isAuthenticated) {
+      return {'success': false, 'error': 'يجب تسجيل الدخول'};
+    }
+    final userId = _authProvider.user!['id'];
+
+    try {
+      final result = await ApiService.postMultipart('create_post_multi', {
+        'user_id': userId,
+        'content': content,
+        'privacy': privacy,
+        'media_type': 'image',
+      }, files: images);
+
+      if (result['success']) {
+        final newPost = Post.fromJson(result['data']);
+        _posts.insert(0, newPost);
+        notifyListeners();
+        return {'success': true};
+      }
+      return {'success': false, 'error': result['message'] ?? 'فشل نشر المنشور'};
+    } catch (e) {
+      return {'success': false, 'error': 'فشل نشر المنشور'};
+    }
+  }
+
   Future<Map<String, dynamic>> repostPost(String postId) async {
     if (!_authProvider.isAuthenticated) {
       return {'success': false, 'error': 'يجب تسجيل الدخول'};
@@ -482,6 +597,55 @@ class PostProvider with ChangeNotifier {
       }
     } catch (e) {
       return {'success': false, 'error': 'فشل إعادة نشر المنشور'};
+    }
+  }
+
+  Future<void> markPostViewed(String postId) async {
+    if (!_authProvider.isAuthenticated || _viewTrackedPostIds.contains(postId)) {
+      return;
+    }
+
+    _viewTrackedPostIds.add(postId);
+    final userId = _authProvider.user!['id'];
+
+    try {
+      final result = await ApiService.post('mark_view', {
+        'user_id': userId,
+        'post_id': postId,
+      });
+
+      if (result['success']) {
+        final viewsCount = int.tryParse(result['views_count'].toString()) ?? 0;
+        final postIndex = _posts.indexWhere((p) => p.id == postId);
+        if (postIndex != -1) {
+          final post = _posts[postIndex];
+          _posts[postIndex] = Post(
+            id: post.id,
+            userId: post.userId,
+            userName: post.userName,
+            userPhoto: post.userPhoto,
+            content: post.content,
+            mediaUrl: post.mediaUrl,
+            mediaType: post.mediaType,
+            likes: post.likes,
+            commentsCount: post.commentsCount,
+            viewsCount: viewsCount,
+            engagementScore: post.engagementScore,
+            createdAt: post.createdAt,
+            time: post.time,
+            isLiked: post.isLiked,
+            isSaved: post.isSaved,
+            musicTitle: post.musicTitle,
+            filterType: post.filterType,
+            repostId: post.repostId,
+          );
+          notifyListeners();
+        }
+      } else {
+        _viewTrackedPostIds.remove(postId);
+      }
+    } catch (_) {
+      _viewTrackedPostIds.remove(postId);
     }
   }
 }

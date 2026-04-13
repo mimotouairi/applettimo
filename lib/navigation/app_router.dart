@@ -19,6 +19,7 @@ import '../screens/home/create_post_screen.dart';
 import '../screens/home/create_story_screen.dart';
 import '../screens/home/edit_profile_screen.dart';
 import '../screens/home/notifications_screen.dart';
+import '../screens/home/search_screen.dart';
 import '../providers/story_provider.dart';
 import '../models/post.dart';
 
@@ -78,10 +79,21 @@ class AppRouter {
         GoRoute(
           path: '/main',
           pageBuilder: (context, state) {
-            final int initialIndex = state.extra is int ? state.extra as int : 0;
+            int initialIndex = 0;
+            String? initialVideoPostId;
+            if (state.extra is int) {
+              initialIndex = state.extra as int;
+            } else if (state.extra is Map<String, dynamic>) {
+              final extra = state.extra as Map<String, dynamic>;
+              initialIndex = extra['initialIndex'] is int ? extra['initialIndex'] as int : 0;
+              initialVideoPostId = extra['videoPostId']?.toString();
+            }
             return CustomTransitionPage(
               key: state.pageKey,
-              child: MainScreen(initialIndex: initialIndex),
+              child: MainScreen(
+                initialIndex: initialIndex,
+                initialVideoPostId: initialVideoPostId,
+              ),
               transitionsBuilder: (context, animation, secondaryAnimation, child) =>
                   FadeTransition(opacity: animation, child: child),
             );
@@ -162,19 +174,24 @@ class AppRouter {
         ),
         GoRoute(
           path: '/create-post',
-          pageBuilder: (context, state) => CustomTransitionPage(
-            key: state.pageKey,
-            child: const CreatePostScreen(),
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-                return SlideTransition(
-                  position: animation.drive(Tween(
-                    begin: const Offset(0.0, 1.0),
-                    end: Offset.zero,
-                  ).chain(CurveTween(curve: Curves.easeInOutQuart))),
-                  child: child,
-                );
-              },
-          ),
+          pageBuilder: (context, state) {
+            final mode = state.extra is Map<String, dynamic>
+                ? (state.extra as Map<String, dynamic>)['mode']?.toString()
+                : null;
+            return CustomTransitionPage(
+              key: state.pageKey,
+              child: CreatePostScreen(mode: mode),
+              transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                  return SlideTransition(
+                    position: animation.drive(Tween(
+                      begin: const Offset(0.0, 1.0),
+                      end: Offset.zero,
+                    ).chain(CurveTween(curve: Curves.easeInOutQuart))),
+                    child: child,
+                  );
+                },
+            );
+          },
         ),
         GoRoute(
           path: '/create-story',
@@ -195,6 +212,10 @@ class AppRouter {
         GoRoute(
           path: '/notifications',
           builder: (context, state) => const NotificationsScreen(),
+        ),
+        GoRoute(
+          path: '/search',
+          builder: (context, state) => const SearchScreen(),
         ),
         GoRoute(
           path: '/edit-profile',

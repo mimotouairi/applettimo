@@ -6,9 +6,11 @@ import '../services/api_service.dart';
 
 class AuthProvider with ChangeNotifier {
   Map<String, dynamic>? _user;
+  List<Map<String, dynamic>> _accounts = [];
   bool _loading = true;
 
   Map<String, dynamic>? get user => _user;
+  List<Map<String, dynamic>> get accounts => _accounts;
   bool get loading => _loading;
   bool get isAuthenticated => _user != null;
 
@@ -24,6 +26,11 @@ class AuthProvider with ChangeNotifier {
   Future<void> _initializeAuth() async {
     final prefs = await SharedPreferences.getInstance();
     final userJson = prefs.getString('user');
+    final accountsJson = prefs.getString('accounts');
+    if (accountsJson != null) {
+      final parsed = jsonDecode(accountsJson);
+      _accounts = List<Map<String, dynamic>>.from(parsed);
+    }
     
     if (userJson != null) {
       _user = jsonDecode(userJson);
@@ -38,7 +45,9 @@ class AuthProvider with ChangeNotifier {
         
         if (result['success']) {
           _user = result['data']['user'];
+          _upsertAccount(_user!);
           await prefs.setString('user', jsonEncode(_user));
+          await prefs.setString('accounts', jsonEncode(_accounts));
           // Trigger post loading after user is verified
           _onUserLoaded();
         } else {
@@ -68,8 +77,10 @@ class AuthProvider with ChangeNotifier {
 
       if (result['success']) {
         _user = result['data'];
+        _upsertAccount(_user!);
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('user', jsonEncode(_user));
+        await prefs.setString('accounts', jsonEncode(_accounts));
         return {'success': true, 'user': _user};
       } else {
         return {'success': false, 'error': result['message']};
@@ -114,8 +125,10 @@ class AuthProvider with ChangeNotifier {
 
       if (result['success']) {
         _user = result['data'];
+        _upsertAccount(_user!);
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('user', jsonEncode(_user));
+        await prefs.setString('accounts', jsonEncode(_accounts));
         return {'success': true, 'user': _user};
       } else {
         return {'success': false, 'error': result['message']};
@@ -135,6 +148,58 @@ class AuthProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> logoutFromCurrentAccount() async {
+    if (_user == null) return logout();
+    final currentId = _user!['id']?.toString();
+    _accounts.removeWhere((acc) => acc['id']?.toString() == currentId);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('accounts', jsonEncode(_accounts));
+    _user = _accounts.isNotEmpty ? _accounts.first : null;
+    if (_user == null) {
+      await prefs.remove('user');
+    } else {
+      await prefs.setString('user', jsonEncode(_user));
+    }
+    notifyListeners();
+  }
+
+  Future<bool> switchAccount(String userId) async {
+    final local = _accounts.cast<Map<String, dynamic>?>().firstWhere(
+          (acc) => acc?['id']?.toString() == userId,
+          orElse: () => null,
+        );
+    try {
+      final result = await ApiService.post('switch_account', {'user_id': userId});
+      if (result['success']) {
+        _user = result['data'];
+      } else if (local != null) {
+        _user = Map<String, dynamic>.from(local);
+      } else {
+        return false;
+      }
+      _upsertAccount(_user!);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user', jsonEncode(_user));
+      await prefs.setString('accounts', jsonEncode(_accounts));
+      notifyListeners();
+      return true;
+    } catch (_) {
+      if (local == null) return false;
+      _user = Map<String, dynamic>.from(local);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user', jsonEncode(_user));
+      notifyListeners();
+      return true;
+    }
+  }
+
+  void _upsertAccount(Map<String, dynamic> account) {
+    final id = account['id']?.toString();
+    if (id == null) return;
+    _accounts.removeWhere((a) => a['id']?.toString() == id);
+    _accounts.insert(0, Map<String, dynamic>.from(account));
+  }
+
   Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> profileData) async {
     if (_user == null) return {'success': false, 'error': 'يجب تسجيل الدخول أولاً'};
 
@@ -146,8 +211,35 @@ class AuthProvider with ChangeNotifier {
 
       if (result['success']) {
         _user = result['data'];
+        _upsertAccount(_user!);
         final prefs = await SharedPreferences.getInstance();
         await prefs.setString('user', jsonEncode(_user));
+        await prefs.setString('accounts', jsonEncode(_accounts));
+        notifyListeners();
+        return {'success': true, 'user': _user};
+      } else {
+        return {'success': false, 'error': result['message']};
+      }
+    } catch (e) {
+      return {'success': false, 'error': 'حدث خطأ أثناء الاتصال بالخادم'};
+    }
+  }
+
+  Future<Map<String, dynamic>> updateProfileV2(Map<String, dynamic> profileData) async {
+    if (_user == null) return {'success': false, 'error': 'يجب تسجيل الدخول أولاً'};
+
+    try {
+      final result = await ApiService.post('update_profile_v2', {
+        'user_id': _user!['id'],
+        ...profileData,
+      });
+
+      if (result['success']) {
+        _user = result['data'];
+        _upsertAccount(_user!);
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('user', jsonEncode(_user));
+        await prefs.setString('accounts', jsonEncode(_accounts));
         notifyListeners();
         return {'success': true, 'user': _user};
       } else {

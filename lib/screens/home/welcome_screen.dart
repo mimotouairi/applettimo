@@ -83,26 +83,11 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 children: [
                   ZoomIn(
                     duration: const Duration(milliseconds: 1200),
-                    child: Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(50),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.2), width: 2),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 20,
-                            spreadRadius: 5,
-                          )
-                        ],
-                      ),
-                      child: Image.asset(
-                        'assets/images/welcome-logo.png',
-                        width: 120,
-                        height: 120,
-                        fit: BoxFit.contain,
-                      ),
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      width: 180,
+                      height: 180,
+                      fit: BoxFit.contain,
                     ),
                   ),
                   const SizedBox(height: 40),
@@ -154,8 +139,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
                 delay: const Duration(milliseconds: 1500),
                 child: const Center(
                   child: SizedBox(
-                    width: 40,
-                    height: 40,
+                    width: 60,
+                    height: 60,
                     child: CircularProgressIndicator(
                       color: Colors.white,
                       strokeWidth: 3,

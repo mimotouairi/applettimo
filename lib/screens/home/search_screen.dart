@@ -136,7 +136,7 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
       return _buildEmptyState('لا توجد منشورات تطابق بحثك', Icons.search_off, colors);
     }
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 120), // Added bottom padding for floating navbar
       itemCount: posts.length,
       itemBuilder: (context, index) => PostCard(
         key: ValueKey(posts[index].id),
@@ -154,7 +154,7 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
       return _buildEmptyState('لم نجد أحداً بهذا الاسم', Icons.person_off_outlined, colors);
     }
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 120), // Added bottom padding for floating navbar
       itemCount: users.length,
       itemBuilder: (context, index) => _buildUserCard(users[index], colors, currentUserId),
     );
@@ -165,7 +165,7 @@ class _SearchScreenState extends State<SearchScreen> with SingleTickerProviderSt
       return const Center(child: CircularProgressIndicator());
     }
     return ListView(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 120), // Added bottom padding for floating navbar
       children: [
         Text(
           'مقترح لك',

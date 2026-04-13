@@ -1,11 +1,17 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { ChatGateway } from '../chat/chat.gateway';
 
 @Injectable()
 export class UserService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private chatGateway: ChatGateway
+  ) {}
 
   async getUserProfile(profile_id: string, current_user_id: string) {
+    const profileId = parseInt(profile_id);
+    const currentUserId = parseInt(current_user_id);
     const user = await this.prisma.user.findUnique({
       where: { id: parseInt(profile_id) },
       include: {
@@ -18,10 +24,30 @@ export class UserService {
     const isFollowing = await this.prisma.follower.findUnique({
       where: {
         followerId_followingId: {
-          followerId: parseInt(current_user_id),
-          followingId: parseInt(profile_id)
+          followerId: currentUserId,
+          followingId: profileId
         }
       }
+    });
+
+    const isFollowedBy = await this.prisma.follower.findUnique({
+      where: {
+        followerId_followingId: {
+          followerId: profileId,
+          followingId: currentUserId
+        }
+      }
+    });
+
+    const posts = await this.prisma.post.findMany({
+      where: { userId: profileId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        user: { select: { id: true, name: true, username: true, photo: true } },
+        _count: { select: { likes: true, comments: true, views: true } },
+        likes: { where: { userId: currentUserId } },
+      },
+      take: 100,
     });
 
     return {
@@ -31,14 +57,42 @@ export class UserService {
         username: user.username,
         email: user.email,
         photo: user.photo,
+        coverPhoto: user.coverPhoto,
         bio: user.bio,
+        profileLinks: user.profileLinks,
+        tags: user.tags,
+        musicTrack: user.musicTrack,
         stats: {
           posts: user._count.posts,
           followers: user._count.followers,
           following: user._count.following
         },
-        isFollowing: !!isFollowing
-      }
+        followersCount: user._count.followers,
+        followingCount: user._count.following,
+        isCelebrity: user._count.followers >= 10000,
+        isFollowing: !!isFollowing,
+        isFollowedBy: !!isFollowedBy
+      },
+      posts: posts.map((post) => ({
+        id: post.id.toString(),
+        user_id: post.userId.toString(),
+        name: post.user?.name || user.name,
+        username: post.user?.username || user.username,
+        photo: post.user?.photo || user.photo,
+        content: post.content,
+        image_url: post.mediaUrl,
+        media_type: post.mediaType,
+        likes: post._count?.likes || 0,
+        comments_count: post._count?.comments || 0,
+        views_count: post._count?.views || 0,
+        engagement_score:
+          (post._count?.likes || 0) * 2.5 +
+          (post._count?.comments || 0) * 3.5 +
+          (post._count?.views || 0) * 0.7,
+        created_at: post.createdAt,
+        time: post.createdAt?.toISOString(),
+        isLiked: (post.likes?.length || 0) > 0,
+      })),
     };
   }
 
@@ -53,8 +107,86 @@ export class UserService {
       return { message: 'Unfollowed' };
     } else {
       await this.prisma.follower.create({ data: { followerId: uid, followingId: pid } });
+      if (uid !== pid) {
+        const notification = await this.prisma.notification.create({
+          data: {
+            userId: pid,
+            actorId: uid,
+            type: 'follow',
+            title: 'متابع جديد',
+            body: 'قام أحد المستخدمين بمتابعتك',
+          },
+          include: {
+            user: { select: { id: true, name: true, photo: true } }
+          }
+        });
+
+        // Fetch actor details for the notification
+        const actor = await this.prisma.user.findUnique({
+          where: { id: uid },
+          select: { id: true, name: true, photo: true }
+        });
+
+        this.chatGateway.emitNotification(pid.toString(), {
+          ...notification,
+          id: notification.id.toString(),
+          actor
+        });
+      }
       return { message: 'Followed' };
     }
+  }
+
+  async getNotifications(userId: string) {
+    const uid = parseInt(userId);
+    const notifications = await this.prisma.notification.findMany({
+      where: { userId: uid },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+    const actorIds = [...new Set(notifications.map((n) => n.actorId))];
+    const actors = await this.prisma.user.findMany({
+      where: { id: { in: actorIds } },
+      select: { id: true, name: true, photo: true },
+    });
+    const actorMap = new Map(actors.map((a) => [a.id, a]));
+
+    return notifications.map((n) => ({
+      id: n.id.toString(),
+      type: n.type,
+      title: n.title,
+      body: n.body,
+      isRead: n.isRead,
+      createdAt: n.createdAt,
+      postId: n.postId?.toString(),
+      commentId: n.commentId?.toString(),
+      actor: actorMap.get(n.actorId)
+        ? {
+            id: (actorMap.get(n.actorId) as any).id.toString(),
+            name: (actorMap.get(n.actorId) as any).name,
+            photo: (actorMap.get(n.actorId) as any).photo,
+          }
+        : null,
+    }));
+  }
+
+  async markNotificationRead(userId: string, notificationId: string) {
+    const uid = parseInt(userId);
+    const nid = parseInt(notificationId);
+    await this.prisma.notification.updateMany({
+      where: { id: nid, userId: uid },
+      data: { isRead: true },
+    });
+    return { success: true };
+  }
+
+  async markAllNotificationsRead(userId: string) {
+    const uid = parseInt(userId);
+    await this.prisma.notification.updateMany({
+      where: { userId: uid, isRead: false },
+      data: { isRead: true },
+    });
+    return { success: true };
   }
 
   async searchUsers(q: string, current_user_id: string) {
@@ -100,6 +232,7 @@ export class UserService {
       posts: postsCount,
       followers: followersCount,
       following: followingCount,
+      isCelebrity: followersCount >= 10000,
       likes: likesCount,
       comments: commentsCount,
       saved: savedCount,

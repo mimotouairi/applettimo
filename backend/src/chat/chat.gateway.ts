@@ -20,7 +20,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server!: Server;
 
-  private connectedUsers = new Map<string, string>(); // socketId -> userId
+  private socketToUser = new Map<string, string>(); // socketId -> userId
+  private userToSockets = new Map<string, Set<string>>(); // userId -> socketIds
 
   handleConnection(client: Socket) {
     console.log(`Client connected: ${client.id}`);
@@ -28,7 +29,16 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   handleDisconnect(client: Socket) {
     console.log(`Client disconnected: ${client.id}`);
-    this.connectedUsers.delete(client.id);
+    const userId = this.socketToUser.get(client.id);
+    if (!userId) return;
+
+    this.socketToUser.delete(client.id);
+    const sockets = this.userToSockets.get(userId);
+    if (!sockets) return;
+    sockets.delete(client.id);
+    if (sockets.size === 0) {
+      this.userToSockets.delete(userId);
+    }
   }
 
   @SubscribeMessage('join')
@@ -36,9 +46,32 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @MessageBody() userId: string,
     @ConnectedSocket() client: Socket,
   ) {
-    this.connectedUsers.set(client.id, userId);
-    client.join(`user_${userId}`);
-    console.log(`User ${userId} joined with socket ${client.id}`);
+    const normalizedUserId = String(userId ?? '').trim();
+    if (!normalizedUserId) return;
+
+    const existingUserId = this.socketToUser.get(client.id);
+    if (existingUserId === normalizedUserId) {
+      // Ignore duplicate join for same socket/user pair.
+      return;
+    }
+
+    if (existingUserId != null && existingUserId != normalizedUserId) {
+      client.leave(`user_${existingUserId}`);
+      const oldSet = this.userToSockets.get(existingUserId);
+      oldSet?.delete(client.id);
+      if (oldSet != null && oldSet.size == 0) {
+        this.userToSockets.delete(existingUserId);
+      }
+    }
+
+    this.socketToUser.set(client.id, normalizedUserId);
+    if (!this.userToSockets.has(normalizedUserId)) {
+      this.userToSockets.set(normalizedUserId, new Set<string>());
+    }
+    this.userToSockets.get(normalizedUserId)!.add(client.id);
+
+    client.join(`user_${normalizedUserId}`);
+    console.log(`User ${normalizedUserId} joined with socket ${client.id}`);
   }
 
   @SubscribeMessage('send_message')
@@ -55,5 +88,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   handleTyping(@MessageBody() data: any) {
     const { receiverId, senderId, isTyping } = data;
     this.server.to(`user_${receiverId}`).emit('user_typing', { senderId, isTyping });
+  }
+
+  emitNotification(receiverId: string, notification: any) {
+    this.server.to(`user_${receiverId}`).emit('new_notification', notification);
   }
 }

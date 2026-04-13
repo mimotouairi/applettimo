@@ -55,17 +55,17 @@ class ApiService {
     String mapped = endpointPart.replaceAll('.php', '');
     
     // Check for each controller category mapping for NestJS
-    if (mapped == 'login' || mapped == 'register') {
+    if (mapped == 'login' || mapped == 'register' || mapped == 'update_profile' || mapped == 'update_profile_v2' || mapped == 'switch_account') {
       mapped = 'auth/$mapped';
-    } else if (['get_posts', 'create_post', 'toggle_like', 'delete_post', 'toggle_save', 'get_saved_posts', 'get_videos', 'repost_post'].contains(mapped)) {
+    } else if (['get_posts', 'get_post', 'create_post', 'create_post_multi', 'toggle_like', 'delete_post', 'toggle_save', 'get_saved_posts', 'get_videos', 'repost_post', 'mark_view'].contains(mapped)) {
       mapped = 'posts/$mapped';
-    } else if (['get_user_profile', 'toggle_follow', 'search_users', 'get_suggested_users', 'get_user_stats'].contains(mapped)) {
+    } else if (['get_user_profile', 'toggle_follow', 'search_users', 'get_suggested_users', 'get_user_stats', 'get_notifications', 'mark_notification_read', 'mark_all_notifications_read'].contains(mapped)) {
       mapped = 'users/$mapped';
     } else if (['get_stories', 'add_story', 'toggle_story_like', 'mark_story_viewed'].contains(mapped)) {
       mapped = 'stories/$mapped';
     } else if (['get_conversations', 'get_messages', 'send_message'].contains(mapped)) {
       mapped = 'chat/$mapped';
-    } else if (['get_comments', 'add_comment'].contains(mapped)) {
+    } else if (['get_comments', 'add_comment', 'toggle_comment_like'].contains(mapped)) {
       mapped = 'comments/$mapped';
     }
 
@@ -108,6 +108,39 @@ class ApiService {
         );
         return _handleResponse(response, endpoint);
       }
+    } catch (e) {
+      return {'success': false, 'message': 'فشل الاتصال بالخادم: ${e.toString()}'};
+    }
+  }
+
+  static Future<Map<String, dynamic>> postMultipart(
+    String endpoint,
+    Map<String, dynamic> data, {
+    List<File> files = const [],
+    String fileField = 'media',
+  }) async {
+    try {
+      final mappedEndpoint = _mapEndpoint(endpoint);
+      final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/$mappedEndpoint'));
+      data.forEach((key, value) {
+        request.fields[key] = value.toString();
+      });
+
+      for (final file in files) {
+        final fileExtension = path.extension(file.path).toLowerCase();
+        final mimeType = _getMimeType(fileExtension);
+        request.files.add(
+          await http.MultipartFile.fromPath(
+            fileField,
+            file.path,
+            contentType: MediaType.parse(mimeType),
+          ),
+        );
+      }
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+      return _handleResponse(response, endpoint);
     } catch (e) {
       return {'success': false, 'message': 'فشل الاتصال بالخادم: ${e.toString()}'};
     }

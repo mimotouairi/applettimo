@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../providers/auth_provider.dart';
 import '../providers/story_provider.dart';
 import '../providers/theme_provider.dart';
+import '../theme/app_theme.dart';
 import '../services/api_service.dart';
 
 class StoriesBar extends StatelessWidget {
@@ -27,14 +28,10 @@ class StoriesBar extends StatelessWidget {
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 16),
-      decoration: BoxDecoration(
-        color: colors.background,
-        border: Border(
-          bottom: BorderSide(color: colors.border.withValues(alpha: 0.5)),
-        ),
-      ),
+      color: Colors.transparent, // Flow naturally with the background
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
         padding: const EdgeInsets.symmetric(horizontal: 20),
         child: Row(
           children: [
@@ -46,11 +43,11 @@ class StoriesBar extends StatelessWidget {
               isAdd: true,
               colors: colors,
             ),
-            const SizedBox(width: 20),
+            const SizedBox(width: 16),
             // Dynamic Stories
             ...stories.map((item) {
               return Padding(
-                padding: const EdgeInsets.only(right: 20),
+                padding: const EdgeInsets.only(right: 16),
                 child: _buildStoryItem(
                   onTap: () => onStoryPress(item),
                   userName: item.userName,
@@ -70,10 +67,11 @@ class StoriesBar extends StatelessWidget {
     required String userName,
     String? imageUrl,
     bool isAdd = false,
-    required dynamic colors,
+    required CustomColors colors,
   }) {
     return GestureDetector(
       onTap: onTap,
+      behavior: HitTestBehavior.opaque,
       child: SizedBox(
         width: 76,
         child: Column(
@@ -82,24 +80,34 @@ class StoriesBar extends StatelessWidget {
               alignment: Alignment.bottomRight,
               children: [
                 Container(
-                  width: 68,
-                  height: 68,
-                  padding: const EdgeInsets.all(2.5),
+                  width: 72,
+                  height: 72,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(
-                      color: isAdd ? colors.textSecondary.withValues(alpha: 0.2) : colors.primary,
-                      width: 1.5,
-                    ),
+                    gradient: isAdd 
+                        ? null 
+                        : LinearGradient(
+                            colors: colors.primaryGradient,
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                    border: isAdd 
+                        ? Border.all(color: colors.border, width: 2)
+                        : null,
                   ),
+                  padding: const EdgeInsets.all(3), // Space for inner circle
                   child: Container(
-                    padding: const EdgeInsets.all(2),
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      color: colors.background,
+                      color: colors.background, // Creates the gap
                     ),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(30),
+                    padding: const EdgeInsets.all(3),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: colors.surface,
+                      ),
+                      clipBehavior: Clip.antiAlias,
                       child: imageUrl != null && imageUrl.isNotEmpty
                           ? CachedNetworkImage(
                               imageUrl: imageUrl,
@@ -113,27 +121,40 @@ class StoriesBar extends StatelessWidget {
                 ),
                 if (isAdd)
                   Container(
-                    width: 22,
-                    height: 22,
+                    width: 24,
+                    height: 24,
                     decoration: BoxDecoration(
-                      color: colors.primary,
+                      gradient: LinearGradient(
+                        colors: colors.primaryGradient,
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
                       shape: BoxShape.circle,
-                      border: Border.all(color: colors.background, width: 2),
+                      border: Border.all(color: colors.background, width: 3),
+                      boxShadow: [
+                        BoxShadow(
+                          color: colors.primary.withValues(alpha: 0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 4),
+                        )
+                      ],
                     ),
                     alignment: Alignment.center,
-                    child: const Icon(Icons.add, size: 12, color: Colors.white),
+                    child: const Icon(Icons.add_rounded, size: 16, color: Colors.white),
                   ),
               ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Text(
               userName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
               style: TextStyle(
-                fontSize: 11,
-                fontWeight: isAdd ? FontWeight.w500 : FontWeight.w700,
-                color: colors.text,
+                fontSize: 12,
+                fontWeight: isAdd ? FontWeight.w600 : FontWeight.w800,
+                letterSpacing: -0.2,
+                color: isAdd ? colors.textSecondary : colors.text,
               ),
             ),
           ],
@@ -142,10 +163,10 @@ class StoriesBar extends StatelessWidget {
     );
   }
 
-  Widget _buildPlaceholder(dynamic colors) {
+  Widget _buildPlaceholder(CustomColors colors) {
     return Container(
-      color: colors.primary.withValues(alpha: 0.1),
-      child: Icon(Icons.person, size: 26, color: colors.primary),
+      color: colors.primary.withValues(alpha: 0.05),
+      child: Icon(Icons.person_rounded, size: 30, color: colors.primary.withValues(alpha: 0.5)),
     );
   }
 }

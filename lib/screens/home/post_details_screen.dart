@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/post_provider.dart';
 import '../../providers/theme_provider.dart';
-import '../../providers/auth_provider.dart';
 import '../../models/post.dart';
 import '../../widgets/post_card.dart';
 import '../../services/api_service.dart';
@@ -23,11 +22,13 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
   List<dynamic> _comments = [];
   bool _isLoadingComments = true;
   late Post _currentPost;
+  String? _replyToCommentId;
 
   @override
   void initState() {
     super.initState();
     _currentPost = widget.post;
+    Provider.of<PostProvider>(context, listen: false).markPostViewed(_currentPost.id);
     _fetchComments();
   }
 
@@ -51,9 +52,13 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
     final text = _commentController.text.trim();
     if (text.isEmpty) return;
 
-    final result = await Provider.of<PostProvider>(context, listen: false).addComment(_currentPost.id, text);
+    final postProvider = Provider.of<PostProvider>(context, listen: false);
+    final result = _replyToCommentId == null
+        ? await postProvider.addComment(_currentPost.id, text)
+        : await postProvider.addReply(_currentPost.id, _replyToCommentId!, text);
     if (result['success']) {
       _commentController.clear();
+      _replyToCommentId = null;
       _fetchComments();
       // Update local post comment count
       setState(() {
@@ -67,10 +72,15 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
           mediaType: _currentPost.mediaType,
           likes: _currentPost.likes,
           commentsCount: _currentPost.commentsCount + 1,
+          viewsCount: _currentPost.viewsCount,
+          engagementScore: _currentPost.engagementScore,
           createdAt: _currentPost.createdAt,
           time: _currentPost.time,
           isLiked: _currentPost.isLiked,
           isSaved: _currentPost.isSaved,
+          musicTitle: _currentPost.musicTitle,
+          filterType: _currentPost.filterType,
+          repostId: _currentPost.repostId,
         );
       });
     } else {
@@ -147,7 +157,7 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
                       ),
                     )
                   else
-                    ..._comments.map((comment) => _buildCommentItem(comment, colors)),
+                    ..._comments.map((comment) => _buildCommentItem(comment, colors, false)),
                 ],
               ),
             ),
@@ -158,8 +168,9 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
     );
   }
 
-  Widget _buildCommentItem(Map<String, dynamic> comment, dynamic colors) {
+  Widget _buildCommentItem(Map<String, dynamic> comment, dynamic colors, bool isReply) {
     return Container(
+      margin: isReply ? const EdgeInsets.only(left: 28) : null,
       padding: const EdgeInsets.symmetric(vertical: 12),
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: colors.border.withValues(alpha: 0.2))),
@@ -169,8 +180,8 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
         children: [
           CircleAvatar(
             radius: 18,
-            backgroundImage: comment['userAvatar'] != null ? NetworkImage(ApiService.getImageUrl(comment['userAvatar'])!) : null,
-            child: comment['userAvatar'] == null ? const Icon(Icons.person, size: 20) : null,
+            backgroundImage: comment['userPhoto'] != null ? NetworkImage(ApiService.getImageUrl(comment['userPhoto'])!) : null,
+            child: comment['userPhoto'] == null ? const Icon(Icons.person, size: 20) : null,
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -186,6 +197,50 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(comment['comment'] ?? '', style: TextStyle(color: colors.text, fontSize: 13, height: 1.4)),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    InkWell(
+                      onTap: () async {
+                        final result = await Provider.of<PostProvider>(context, listen: false)
+                            .toggleCommentLike(comment['id'].toString());
+                        if (result['success']) {
+                          _fetchComments();
+                        }
+                      },
+                      child: Row(
+                        children: [
+                          Icon(
+                            (comment['isLiked'] == true) ? Icons.favorite : Icons.favorite_border,
+                            size: 14,
+                            color: (comment['isLiked'] == true) ? colors.error : colors.textSecondary,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${comment['likesCount'] ?? 0}',
+                            style: TextStyle(color: colors.textSecondary, fontSize: 11),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    if (!isReply)
+                      InkWell(
+                        onTap: () {
+                          setState(() {
+                            _replyToCommentId = comment['id'].toString();
+                          });
+                        },
+                        child: Text(
+                          'رد',
+                          style: TextStyle(color: colors.primary, fontSize: 12, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                  ],
+                ),
+                if ((comment['replies'] as List?)?.isNotEmpty ?? false)
+                  ...((comment['replies'] as List)
+                      .map((reply) => _buildCommentItem(Map<String, dynamic>.from(reply), colors, true))),
               ],
             ),
           ),
@@ -215,13 +270,18 @@ class _PostDetailsScreenState extends State<PostDetailsScreen> {
                 maxLines: null,
                 style: TextStyle(color: colors.text, fontSize: 14),
                 decoration: InputDecoration(
-                  hintText: 'اكتب تعليقاً...',
+                  hintText: _replyToCommentId == null ? 'اكتب تعليقاً...' : 'اكتب ردًا...',
                   hintStyle: TextStyle(color: colors.textSecondary, fontSize: 13),
                   border: InputBorder.none,
                 ),
               ),
             ),
           ),
+          if (_replyToCommentId != null)
+            IconButton(
+              onPressed: () => setState(() => _replyToCommentId = null),
+              icon: Icon(Icons.close, color: colors.textSecondary),
+            ),
           const SizedBox(width: 12),
           IconButton(
             onPressed: _handleAddComment,

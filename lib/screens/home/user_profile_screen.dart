@@ -3,8 +3,11 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/post_provider.dart';
 import '../../providers/theme_provider.dart';
+import '../../theme/app_theme.dart';
 import '../../widgets/post_card.dart';
 import '../../services/api_service.dart';
+import '../../widgets/mini_music_player.dart';
+import '../../widgets/rich_bio_text.dart';
 import 'package:go_router/go_router.dart';
 import '../../models/post.dart';
 
@@ -22,6 +25,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> with SingleTicker
   List<Post> _userPosts = [];
   bool _loading = true;
   bool _followingLoading = false;
+  String? _loadError;
+  String? _activeMusicUrl;
+  String? _activeMusicTitle;
 
   @override
   void initState() {
@@ -33,13 +39,25 @@ class _UserProfileScreenState extends State<UserProfileScreen> with SingleTicker
   Future<void> _fetchProfile() async {
     final postProvider = Provider.of<PostProvider>(context, listen: false);
     final result = await postProvider.getUserProfile(widget.userId);
-    
-    if (mounted && result['success']) {
+    if (!mounted) return;
+
+    if (result['success']) {
+      final data = result['data'] as Map<String, dynamic>;
+      final user = Map<String, dynamic>.from(data['user'] as Map<String, dynamic>);
+      final stats = (user['stats'] as Map<String, dynamic>?) ?? {};
+      user['followersCount'] = user['followersCount'] ?? stats['followers'] ?? 0;
+      user['followingCount'] = user['followingCount'] ?? stats['following'] ?? 0;
+
       setState(() {
-        _profileData = result['data']['user'];
-        _userPosts = (result['data']['posts'] as List)
+        _profileData = user;
+        _userPosts = ((data['posts'] as List?) ?? [])
             .map((json) => Post.fromJson(json))
             .toList();
+        _loading = false;
+      });
+    } else {
+      setState(() {
+        _loadError = result['message']?.toString() ?? 'تعذر تحميل الملف الشخصي';
         _loading = false;
       });
     }
@@ -61,10 +79,9 @@ class _UserProfileScreenState extends State<UserProfileScreen> with SingleTicker
     if (mounted && result['success']) {
       setState(() {
         final isFollowing = _profileData!['isFollowing'] == true || _profileData!['isFollowing'] == 1;
+        final followers = int.tryParse(_profileData!['followersCount'].toString()) ?? 0;
         _profileData!['isFollowing'] = !isFollowing;
-        _profileData!['followersCount'] = isFollowing 
-            ? (_profileData!['followersCount'] as int) - 1 
-            : (_profileData!['followersCount'] as int) + 1;
+        _profileData!['followersCount'] = isFollowing ? followers - 1 : followers + 1;
       });
     }
     setState(() => _followingLoading = false);
@@ -77,229 +94,358 @@ class _UserProfileScreenState extends State<UserProfileScreen> with SingleTicker
         body: Center(child: CircularProgressIndicator()),
       );
     }
+    if (_profileData == null) {
+      return Scaffold(
+        body: Center(
+          child: Text(_loadError ?? 'تعذر تحميل الملف الشخصي'),
+        ),
+      );
+    }
 
-    final themeProvider = Provider.of<ThemeProvider>(context);
-    final colors = themeProvider.colors;
+    final colors = Theme.of(context).extension<CustomColors>()!;
+    final authProvider = Provider.of<AuthProvider>(context);
+    final isMe = authProvider.user?['id']?.toString() == widget.userId.toString();
 
     final mediaPosts = _userPosts.where((p) => p.mediaUrl != null).toList();
     final isFollowing = _profileData!['isFollowing'] == true || _profileData!['isFollowing'] == 1;
+    final isCelebrity = _profileData!['isCelebrity'] == true ||
+        ((int.tryParse(_profileData!['followersCount']?.toString() ?? '0') ?? 0) >= 10000);
+    final coverUrl = ApiService.getImageUrl(_profileData!['coverPhoto']);
+    final musicTrack = _profileData!['musicTrack']?.toString();
 
     return Scaffold(
       backgroundColor: colors.background,
       body: DefaultTabController(
         length: 2,
-        child: NestedScrollView(
-          headerSliverBuilder: (context, innerBoxIsScrolled) {
-            return [
-              SliverAppBar(
-                expandedHeight: 380,
-                floating: false,
-                pinned: true,
-                backgroundColor: colors.background,
-                elevation: 0,
-                leading: IconButton(
-                  icon: const Icon(Icons.arrow_back, color: Colors.white),
-                  onPressed: () => context.pop(),
-                ),
-                flexibleSpace: FlexibleSpaceBar(
-                  collapseMode: CollapseMode.pin,
-                  background: Stack(
-                    children: [
-                      // Cover View (Gradient for now)
-                      Container(
-                        height: 220,
-                        decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [colors.primary, colors.secondary],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
-                        ),
-                      ),
-                      // Avatar
-                      Positioned(
-                        top: 170,
-                        left: 20,
-                        child: Container(
-                          width: 100,
-                          height: 100,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 4),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.2),
-                                blurRadius: 10,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: ClipRRect(
-                            borderRadius: BorderRadius.circular(50),
-                            child: _profileData!['photo'] != null
-                                ? Image.network(
-                                    ApiService.getImageUrl(_profileData!['photo'])!,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) =>
-                                        Icon(Icons.person, size: 50, color: colors.textSecondary),
-                                  )
-                                : Icon(Icons.person, size: 50, color: colors.textSecondary),
-                          ),
-                        ),
-                      ),
-                      // User Info below Avatar
-                      Positioned(
-                        top: 275,
-                        left: 20,
-                        right: 20,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _profileData!['name'] ?? '',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w900,
-                                color: colors.text,
+        child: Stack(
+          children: [
+            NestedScrollView(
+              headerSliverBuilder: (context, innerBoxIsScrolled) {
+                return [
+                  SliverAppBar(
+                    expandedHeight: 400,
+                    floating: false,
+                    pinned: true,
+                    backgroundColor: colors.background,
+                    elevation: 0,
+                    collapsedHeight: 60,
+                    toolbarHeight: 60,
+                    automaticallyImplyLeading: false,
+                    title: innerBoxIsScrolled ? Text(_profileData!['name'] ?? '', style: const TextStyle(fontWeight: FontWeight.w900)) : null,
+                    flexibleSpace: FlexibleSpaceBar(
+                      collapseMode: CollapseMode.pin,
+                      background: Stack(
+                        children: [
+                          // Cover area
+                          Container(
+                            height: 200,
+                            decoration: BoxDecoration(
+                              image: coverUrl != null
+                                  ? DecorationImage(image: NetworkImage(coverUrl), fit: BoxFit.cover)
+                                  : null,
+                              gradient: coverUrl == null
+                                  ? LinearGradient(colors: colors.primaryGradient)
+                                  : null,
+                            ),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                  colors: [Colors.black.withValues(alpha: 0.2), colors.background],
+                                ),
                               ),
                             ),
-                            Text(
-                              '@${_profileData!['username'] ?? ''}',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: colors.textSecondary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            if (_profileData!['bio'] != null)
-                              Text(
-                                _profileData!['bio'],
-                                style: TextStyle(color: colors.text),
-                              ),
-                            const SizedBox(height: 20),
-                            // Stats Row
-                            Row(
+                          ),
+                          
+                          // Horizontal Profile Info
+                          Positioned(
+                            top: 140,
+                            left: 0,
+                            right: 0,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _buildStatItem(_profileData!['followersCount'].toString(), 'متابع', colors),
-                                const SizedBox(width: 30),
-                                _buildStatItem(_profileData!['followingCount'].toString(), 'يتابع', colors),
-                                const SizedBox(width: 30),
-                                _buildStatItem(_userPosts.length.toString(), 'منشور', colors),
-                              ],
-                            ),
-                            const SizedBox(height: 20),
-                            // Action Buttons
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: ElevatedButton(
-                                    onPressed: _handleToggleFollow,
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: isFollowing ? Colors.transparent : colors.primary,
-                                      foregroundColor: isFollowing ? colors.primary : Colors.white,
-                                      elevation: 0,
-                                      side: isFollowing ? BorderSide(color: colors.primary) : null,
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                      minimumSize: const Size(double.infinity, 44),
-                                    ),
-                                    child: _followingLoading 
-                                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                        : Text(isFollowing ? 'إلغاء المتابعة' : 'متابعة', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      // Avatar
+                                      Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          gradient: LinearGradient(colors: colors.primaryGradient),
+                                          boxShadow: [
+                                            BoxShadow(color: colors.primary.withValues(alpha: 0.2), blurRadius: 15, offset: const Offset(0, 5)),
+                                          ],
+                                        ),
+                                        child: CircleAvatar(
+                                          radius: 46,
+                                          backgroundColor: colors.background,
+                                          child: CircleAvatar(
+                                            radius: 42,
+                                            backgroundImage: _profileData!['photo'] != null ? NetworkImage(ApiService.getImageUrl(_profileData!['photo'])!) : null,
+                                            child: _profileData!['photo'] == null ? Icon(Icons.person, size: 40, color: colors.primary) : null,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 20),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                Text(
+                                                  _profileData!['name'] ?? '',
+                                                  style: TextStyle(color: colors.text, fontSize: 22, fontWeight: FontWeight.w900),
+                                                ),
+                                                if (isCelebrity) ...[
+                                                  const SizedBox(width: 4),
+                                                  Icon(Icons.verified_rounded, color: Colors.blue.shade500, size: 18),
+                                                ],
+                                              ],
+                                            ),
+                                            const SizedBox(height: 8),
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                _buildCompactStat(_profileData!['stats']?['posts']?.toString() ?? '0', 'منشور', colors),
+                                                _buildCompactStat(_profileData!['followersCount'].toString(), 'متابع', colors),
+                                                _buildCompactStat(_profileData!['followingCount'].toString(), 'يتابع', colors),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                const SizedBox(width: 10),
-                                _buildIconButton(Icons.chat_bubble_outline, () => context.push('/chat', extra: _profileData), colors),
-                                const SizedBox(width: 10),
-                                _buildIconButton(Icons.share_outlined, () {}, colors),
+                                
+                                const SizedBox(height: 20),
+                                // Bio Section
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      RichBioText(
+                                        text: _profileData!['bio'] ?? 'لا يوجد وصف متاح ✨',
+                                        style: TextStyle(color: colors.text, fontSize: 15, fontWeight: FontWeight.w500, height: 1.4),
+                                      ),
+                                      if (musicTrack != null) ...[
+                                        const SizedBox(height: 12),
+                                        GestureDetector(
+                                          onTap: () {
+                                            setState(() {
+                                              _activeMusicUrl = musicTrack;
+                                              _activeMusicTitle = _profileData!['musicTitle'] ?? 'موسيقى الملف الشخصي';
+                                            });
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                            decoration: BoxDecoration(
+                                              color: colors.primary.withValues(alpha: 0.1),
+                                              borderRadius: BorderRadius.circular(12),
+                                              border: Border.all(color: colors.primary.withValues(alpha: 0.2)),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.music_note_rounded, color: colors.primary, size: 16),
+                                                const SizedBox(width: 8),
+                                                Text(
+                                                  _profileData!['musicTitle'] ?? 'استمع للموسيقى',
+                                                  style: TextStyle(color: colors.primary, fontWeight: FontWeight.bold, fontSize: 13),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                                
+                                const SizedBox(height: 24),
+                                // Action Buttons
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                                  child: Row(
+                                    children: [
+                                      Expanded(
+                                        flex: 2,
+                                        child: ElevatedButton(
+                                          onPressed: _handleToggleFollow,
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: isFollowing ? colors.surface : colors.primary,
+                                            foregroundColor: isFollowing ? colors.text : Colors.white,
+                                            elevation: 0,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(16),
+                                              side: isFollowing ? BorderSide(color: colors.border) : BorderSide.none,
+                                            ),
+                                            padding: const EdgeInsets.symmetric(vertical: 16),
+                                          ),
+                                          child: _followingLoading 
+                                              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                              : Text(isFollowing ? 'متابَع' : (_profileData!['isFollowedBy'] == true ? 'رد المتابعة' : 'متابعة'), style: const TextStyle(fontWeight: FontWeight.w800)),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: ElevatedButton(
+                                          onPressed: () => context.push('/chat', extra: _profileData),
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor: colors.surface,
+                                            foregroundColor: colors.text,
+                                            elevation: 0,
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(16),
+                                              side: const BorderSide(color: Colors.transparent),
+                                            ),
+                                            padding: const EdgeInsets.symmetric(vertical: 16),
+                                          ).copyWith(
+                                            side: WidgetStateProperty.all(BorderSide(color: colors.border))
+                                          ),
+                                          child: const Text('رسالة', style: TextStyle(fontWeight: FontWeight.w800)),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      _buildIconButton(Icons.share_rounded, () {}, colors),
+                                    ],
+                                  ),
+                                ),
                               ],
                             ),
-                          ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SliverPersistentHeader(
+                    pinned: true,
+                    delegate: _SliverTabBarDelegate(
+                      TabBar(
+                        controller: _tabController,
+                        indicatorColor: colors.primary,
+                        indicatorWeight: 3,
+                        labelColor: colors.primary,
+                        unselectedLabelColor: colors.textSecondary,
+                        labelStyle: const TextStyle(fontWeight: FontWeight.bold),
+                        tabs: const [
+                          Tab(icon: Icon(Icons.grid_on_outlined), text: 'المنشورات'),
+                          Tab(icon: Icon(Icons.image_outlined), text: 'الوسائط'),
+                        ],
+                      ),
+                      colors.background,
+                    ),
+                  ),
+                ];
+              },
+              body: TabBarView(
+                controller: _tabController,
+                children: [
+                  _userPosts.isEmpty
+                      ? _buildEmptyState('لا توجد منشورات بعد', colors)
+                      : ListView.builder(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          itemCount: _userPosts.length,
+                          itemBuilder: (context, index) => PostCard(
+                            key: ValueKey(_userPosts[index].id),
+                            post: _userPosts[index],
+                            autoplayVideo: false,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
+                  mediaPosts.isEmpty
+                      ? _buildEmptyState('لا توجد وسائط', colors)
+                      : GridView.builder(
+                          padding: const EdgeInsets.all(5),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3,
+                            crossAxisSpacing: 5,
+                            mainAxisSpacing: 5,
+                          ),
+                          itemCount: mediaPosts.length,
+                          itemBuilder: (context, index) => Image.network(
+                            ApiService.getImageUrl(mediaPosts[index].mediaUrl)!,
+                            fit: BoxFit.cover,
+                          ),
+                        ),
+                ],
+              ),
+            ),
+
+            // Music player overlay
+            if (_activeMusicUrl != null)
+              Positioned(
+                bottom: 16,
+                left: 16,
+                right: 16,
+                child: MiniMusicPlayer(
+                  musicUrl: _activeMusicUrl!,
+                  title: _activeMusicTitle!,
+                  onStop: () => setState(() => _activeMusicUrl = null),
                 ),
               ),
-              SliverPersistentHeader(
-                pinned: true,
-                delegate: _SliverTabBarDelegate(
-                  TabBar(
-                    controller: _tabController,
-                    indicatorColor: colors.primary,
-                    indicatorWeight: 3,
-                    labelColor: colors.primary,
-                    unselectedLabelColor: colors.textSecondary,
-                    labelStyle: const TextStyle(fontWeight: FontWeight.bold),
-                    tabs: const [
-                      Tab(icon: Icon(Icons.grid_on_outlined), text: 'المنشورات'),
-                      Tab(icon: Icon(Icons.image_outlined), text: 'الوسائط'),
-                    ],
-                  ),
-                  colors.background,
-                ),
-              ),
-            ];
-          },
-          body: TabBarView(
-            controller: _tabController,
-            children: [
-              _userPosts.isEmpty
-                  ? _buildEmptyState('لا توجد منشورات بعد', colors)
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      itemCount: _userPosts.length,
-                      itemBuilder: (context, index) => PostCard(
-                        key: ValueKey(_userPosts[index].id),
-                        post: _userPosts[index],
-                      ),
-                    ),
-              mediaPosts.isEmpty
-                  ? _buildEmptyState('لا توجد وسائط', colors)
-                  : GridView.builder(
-                      padding: const EdgeInsets.all(5),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        crossAxisSpacing: 5,
-                        mainAxisSpacing: 5,
-                      ),
-                      itemCount: mediaPosts.length,
-                      itemBuilder: (context, index) => Image.network(
-                        ApiService.getImageUrl(mediaPosts[index].mediaUrl)!,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-            ],
-          ),
+
+            // Back button
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 10,
+              left: 16,
+              child: _buildHeaderAction(Icons.arrow_back_rounded, () => context.pop()),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildStatItem(String value, String label, dynamic colors) {
+  Widget _buildCompactStat(String value, String label, CustomColors colors) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Text(value, style: TextStyle(color: colors.text, fontWeight: FontWeight.w900, fontSize: 18)),
-        Text(label, style: TextStyle(color: colors.textSecondary, fontSize: 12)),
+        Text(label, style: TextStyle(color: colors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600)),
       ],
     );
   }
 
-  Widget _buildIconButton(IconData icon, VoidCallback onPressed, dynamic colors) {
-    return OutlinedButton(
-      onPressed: onPressed,
-      style: OutlinedButton.styleFrom(
-        minimumSize: const Size(44, 44),
-        padding: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        side: BorderSide(color: colors.border),
+  Widget _buildHeaderAction(IconData icon, VoidCallback onTap) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.2),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
       ),
-      child: Icon(icon, color: colors.text, size: 20),
+      child: IconButton(
+        icon: Icon(icon, color: Colors.white, size: 20),
+        onPressed: onTap,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+      ),
     );
   }
 
-  Widget _buildEmptyState(String message, dynamic colors) {
+  Widget _buildIconButton(IconData icon, VoidCallback onTap, CustomColors colors) {
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: colors.border),
+      ),
+      child: IconButton(
+        icon: Icon(icon, color: colors.text, size: 20),
+        onPressed: onTap,
+        padding: const EdgeInsets.all(12),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(String message, CustomColors colors) {
     return Center(
       child: Text(message, style: TextStyle(color: colors.textSecondary)),
     );

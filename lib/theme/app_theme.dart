@@ -93,9 +93,9 @@ class CustomColors extends ThemeExtension<CustomColors> {
       text: Color.lerp(text, other.text, t)!,
       textSecondary: Color.lerp(textSecondary, other.textSecondary, t)!,
       primary: Color.lerp(primary, other.primary, t)!,
-      primaryGradient: primaryGradient, // Simplification
+      primaryGradient: primaryGradient,
       secondary: Color.lerp(secondary, other.secondary, t)!,
-      secondaryGradient: secondaryGradient, // Simplification
+      secondaryGradient: secondaryGradient,
       accent: Color.lerp(accent, other.accent, t)!,
       error: Color.lerp(error, other.error, t)!,
       border: Color.lerp(border, other.border, t)!,
@@ -109,46 +109,48 @@ class CustomColors extends ThemeExtension<CustomColors> {
     );
   }
 
+  // ULTRA PREMIUM LIGHT THEME
   static final light = CustomColors(
-    background: const Color(0xFFF8F9FA),
+    background: const Color(0xFFF4F7F9),
     surface: const Color(0xFFFFFFFF),
-    text: const Color(0xFF1A1D1E),
-    textSecondary: const Color(0xFF707070),
-    primary: const Color(0xFFFF7043),
-    primaryGradient: [const Color(0xFFFF8A65), const Color(0xFFFF7043)],
-    secondary: const Color(0xFF4FC3F7),
-    secondaryGradient: [const Color(0xFF81D4FA), const Color(0xFF4FC3F7)],
-    accent: const Color(0xFFFF9E80),
-    error: const Color(0xFFE57373),
-    border: const Color(0xFFEEEEEE),
+    text: const Color(0xFF012A4A),
+    textSecondary: const Color(0xFF4682A9),
+    primary: const Color(0xFF014871),
+    primaryGradient: [const Color(0xFF014871), const Color(0xFFD7EDE2)], // Exact Inspiration
+    secondary: const Color(0xFFD7EDE2),
+    secondaryGradient: [const Color(0xFFA3C9C7), const Color(0xFFD7EDE2)],
+    accent: const Color(0xFF00A8E8),
+    error: const Color(0xFFFF3366),
+    border: const Color(0xFFE1E8ED),
     card: const Color(0xFFFFFFFF),
-    muted: const Color(0xFFBDBDBD),
+    muted: const Color(0xFF8B98A5),
     white: const Color(0xFFFFFFFF),
-    glass: Colors.white.withValues(alpha: 0.9),
-    warning: const Color(0xFFFFB74D),
-    info: const Color(0xFF64B5F6),
-    success: const Color(0xFF81C784),
+    glass: const Color(0xFFFFFFFF).withValues(alpha: 0.85),
+    warning: const Color(0xFFF59E0B),
+    info: const Color(0xFF3B82F6),
+    success: const Color(0xFF10B981),
   );
 
+  // ULTRA PREMIUM DARK THEME
   static final dark = CustomColors(
-    background: const Color(0xFF121212),
-    surface: const Color(0xFF1E1E1E),
-    text: const Color(0xFFE0E0E0),
-    textSecondary: const Color(0xFFA0A0A0),
-    primary: const Color(0xFFFF8A65),
-    primaryGradient: [const Color(0xFFFFAB91), const Color(0xFFFF8A65)],
-    secondary: const Color(0xFF81D4FA),
-    secondaryGradient: [const Color(0xFFB3E5FC), const Color(0xFF81D4FA)],
-    accent: const Color(0xFFFFCCBC),
-    error: const Color(0xFFEF9A9A),
-    border: const Color(0xFF2C2C2C),
-    card: const Color(0xFF1E1E1E),
-    muted: const Color(0xFF616161),
+    background: const Color(0xFF000D1A),
+    surface: const Color(0xFF001F33),
+    text: const Color(0xFFE1EBF5),
+    textSecondary: const Color(0xFF8FB3CE),
+    primary: const Color(0xFF014871),
+    primaryGradient: [const Color(0xFF012A4A), const Color(0xFF014871), const Color(0xFF4E89AE)],
+    secondary: const Color(0xFFD7EDE2),
+    secondaryGradient: [const Color(0xFFD7EDE2), const Color(0xFFB8D8D8)],
+    accent: const Color(0xFF00B4D8),
+    error: const Color(0xFFFF4B4B),
+    border: const Color(0xFF1A3D5C),
+    card: const Color(0xFF00223B),
+    muted: const Color(0xFF5C6A7A),
     white: const Color(0xFFFFFFFF),
-    glass: const Color(0xFF1E1E1E).withValues(alpha: 0.9),
-    warning: const Color(0xFFFFE082),
-    info: const Color(0xFF90CAF9),
-    success: const Color(0xFFA5D6A7),
+    glass: const Color(0xFF000D1A).withValues(alpha: 0.75),
+    warning: const Color(0xFFFFB020),
+    info: const Color(0xFF60A5FA),
+    success: const Color(0xFF34D399),
   );
 }
 
@@ -161,6 +163,7 @@ class AppTheme {
       brightness: isDarkMode ? Brightness.dark : Brightness.light,
       primaryColor: colors.primary,
       scaffoldBackgroundColor: colors.background,
+      fontFamily: 'Inter', // Assuming Inter or system default, will look extremely clean
       extensions: [colors],
       colorScheme: ColorScheme(
         brightness: isDarkMode ? Brightness.dark : Brightness.light,
@@ -175,26 +178,28 @@ class AppTheme {
       ),
       textTheme: TextTheme(
         displayLarge: TextStyle(
-          fontSize: 34,
+          fontSize: 36,
           fontWeight: FontWeight.w900,
-          letterSpacing: -1,
+          letterSpacing: -1.5,
+          height: 1.1,
           color: colors.text,
         ),
         displayMedium: TextStyle(
-          fontSize: 26,
+          fontSize: 28,
           fontWeight: FontWeight.w800,
-          letterSpacing: -0.8,
+          letterSpacing: -1.0,
           color: colors.text,
         ),
         titleLarge: TextStyle(
-          fontSize: 20,
+          fontSize: 22,
           fontWeight: FontWeight.w700,
           letterSpacing: -0.5,
           color: colors.text,
         ),
         bodyLarge: TextStyle(
           fontSize: 16,
-          fontWeight: FontWeight.w400,
+          fontWeight: FontWeight.w500,
+          letterSpacing: -0.2,
           color: colors.text,
         ),
         bodyMedium: TextStyle(
@@ -203,8 +208,8 @@ class AppTheme {
           color: colors.textSecondary,
         ),
         labelLarge: TextStyle(
-          fontSize: 13,
-          fontWeight: FontWeight.w600,
+          fontSize: 14,
+          fontWeight: FontWeight.w700,
           letterSpacing: 0.2,
           color: colors.text,
         ),
@@ -212,14 +217,38 @@ class AppTheme {
       cardTheme: CardThemeData(
         color: colors.card,
         elevation: 0,
+        margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: colors.border),
+          borderRadius: BorderRadius.circular(24), // Smoother borders
+          side: BorderSide(color: colors.border, width: 0.5),
         ),
       ),
       dividerTheme: DividerThemeData(
         color: colors.border,
-        thickness: 1,
+        thickness: 0.5, // More subtle borders like premium native apps
+        space: 1,
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: colors.background,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        centerTitle: true,
+        iconTheme: IconThemeData(color: colors.text),
+        titleTextStyle: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w700,
+          color: colors.text,
+          letterSpacing: -0.5,
+        ),
+      ),
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
+        backgroundColor: colors.surface,
+        elevation: 0,
+        selectedItemColor: colors.primary,
+        unselectedItemColor: colors.textSecondary,
+        type: BottomNavigationBarType.fixed,
+        showSelectedLabels: false,
+        showUnselectedLabels: false,
       ),
     );
   }
