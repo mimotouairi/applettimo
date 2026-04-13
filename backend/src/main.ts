@@ -11,6 +11,10 @@ async function bootstrap() {
   // Enable CORS
   app.enableCors();
 
+  // Increase body limits for large video uploads
+  app.use(express.json({ limit: '100mb' }));
+  app.use(express.urlencoded({ limit: '100mb', extended: true }));
+
   // Integrated global validation pipe
   app.useGlobalPipes(new ValidationPipe());
 

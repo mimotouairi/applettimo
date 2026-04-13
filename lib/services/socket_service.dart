@@ -13,12 +13,14 @@ class SocketService {
   }
 
   static void _initSocket() {
-    // Determine socket URL from ApiService host
-    final String socketUrl = ApiService.baseMediaUrl;
+    // استخدم رابط السيرفر مباشرة بدون إضافات قد تسبب مشاكل في المنافذ
+    const String socketUrl = 'https://let-backend.onrender.com';
     
     _socket = io.io(socketUrl, io.OptionBuilder()
-      .setTransports(['websocket']) // for Flutter or Web
+      .setTransports(['websocket'])
+      .setPath('/socket.io/') // تأكد من المسار الصحيح
       .enableAutoConnect()
+      .enableReconnection()
       .build());
 
     _socket!.onConnect((_) {
